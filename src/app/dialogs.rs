@@ -60,6 +60,10 @@ impl Dialog {
 
 /// Dimmed backdrop plus a centred card. Returns `true` when the backdrop was clicked.
 pub(super) fn modal(ctx: &egui::Context, p: &Pal, name: &str, width: f32, add: impl FnOnce(&mut Ui)) -> bool {
+    // egui keeps each Area's layer position by id, and clicking the backdrop raises it above everything
+    // that is shown later under the same id. A generation number that changes on every opening gives the
+    // backdrop and the card fresh ids, so a reopened modal always has the card on top of the backdrop.
+    let name = &format!("{name}-{}", super::modal_generation(ctx));
     let screen = ctx.content_rect();
     let dim = egui::Area::new(id_of(&format!("{name}-dim"))).order(Order::Foreground).fixed_pos(screen.min).show(ctx, |ui| {
         let r = ui.allocate_rect(screen, Sense::click());

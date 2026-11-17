@@ -275,3 +275,11 @@ pub fn logo_image(ui: &mut Ui, tex: &egui::TextureHandle, size: f32) -> Response
     ui.painter().image(tex.id(), rect, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
     resp
 }
+
+/// The app icon centred horizontally in the available width (collapsed sidebar rail).
+pub fn logo_image_centered(ui: &mut Ui, tex: &egui::TextureHandle, size: f32) -> Response {
+    let (row, resp) = ui.allocate_exact_size(vec2(ui.available_width(), size), Sense::click());
+    let rect = Rect::from_center_size(row.center(), vec2(size, size));
+    ui.painter().image(tex.id(), rect, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
+    resp
+}

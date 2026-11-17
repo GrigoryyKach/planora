@@ -67,10 +67,16 @@ impl App {
     pub(super) fn settings_view(&mut self, ui: &mut Ui, p: &Pal) {
         let ctx = ui.ctx().clone();
         let t = self.s();
-        ui.label(RichText::new(t.settings).font(theme::bold(24.0)).color(p.text));
-        ui.add_space(2.0);
         ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
-            ui.set_max_width(680.0);
+          // The column keeps its maximum width and sits in the middle of the main area.
+          let avail = ui.available_width();
+          let col_w = (avail - 12.0).clamp(300.0, 680.0);
+          ui.horizontal_top(|ui| {
+            ui.add_space(((avail - col_w) / 2.0).max(0.0));
+            ui.vertical(|ui| {
+            ui.set_width(col_w);
+            ui.label(RichText::new(t.settings).font(theme::bold(24.0)).color(p.text));
+            ui.add_space(2.0);
 
             // ── Interface
             group(ui, p, t.group_interface, |ui| {
@@ -245,6 +251,8 @@ impl App {
                 }
             });
             ui.add_space(16.0);
+            });
+          });
         });
         if self.cfg.nav != Nav::Settings {
             self.settings_msg = None;

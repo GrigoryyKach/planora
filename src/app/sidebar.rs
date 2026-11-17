@@ -81,7 +81,7 @@ impl App {
         let collapsed = self.cfg.sidebar_collapsed;
         let mut toggle = false;
         if collapsed {
-            let resp = widgets::logo_image(ui, &self.logo, 36.0);
+            let resp = widgets::logo_image_centered(ui, &self.logo, 36.0);
             if resp.on_hover_cursor(CursorIcon::PointingHand).on_hover_text(t.expand_sidebar).clicked() {
                 toggle = true;
             }

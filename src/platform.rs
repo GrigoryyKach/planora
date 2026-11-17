@@ -11,8 +11,20 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 };
 
 pub const WINDOW_TITLE: &str = "Planora";
-const MUTEX_NAME: &str = "Local\\Planora.SingleInstance";
-const EVENT_NAME: &str = "Local\\Planora.ShowWindow";
+/// Names of the single-instance mutex and the "show" event. With `PLANORA_DATA_DIR` set (tests, screenshots)
+/// they get a suffix, so a test instance never talks to the user's real Planora.
+fn names() -> (String, String) {
+    let suffix = match std::env::var("PLANORA_DATA_DIR") {
+        Ok(d) if !d.is_empty() => {
+            use std::hash::{Hash, Hasher};
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            d.to_lowercase().hash(&mut h);
+            format!(".{:x}", h.finish())
+        }
+        _ => String::new(),
+    };
+    (format!("Local\\Planora.SingleInstance{suffix}"), format!("Local\\Planora.ShowWindow{suffix}"))
+}
 
 fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(std::iter::once(0)).collect()
@@ -22,7 +34,7 @@ fn wide(s: &str) -> Vec<u16> {
 /// in that case it has been asked to show its window.
 pub fn claim_single_instance() -> bool {
     unsafe {
-        let m = CreateMutexW(std::ptr::null(), 0, wide(MUTEX_NAME).as_ptr());
+        let m = CreateMutexW(std::ptr::null(), 0, wide(&names().0).as_ptr());
         if m.is_null() {
             return true; // cannot tell; do not block startup
         }
@@ -30,7 +42,7 @@ pub fn claim_single_instance() -> bool {
             CloseHandle(m);
             // We were just started by the user, so we may hand the foreground right to the other instance.
             AllowSetForegroundWindow(ASFW_ANY);
-            let ev = CreateEventW(std::ptr::null(), 0, 0, wide(EVENT_NAME).as_ptr());
+            let ev = CreateEventW(std::ptr::null(), 0, 0, wide(&names().1).as_ptr());
             if !ev.is_null() {
                 SetEvent(ev);
                 CloseHandle(ev);
@@ -45,7 +57,7 @@ pub fn claim_single_instance() -> bool {
 /// Background thread: whenever a second launch signals the event, shows the main window and calls `on_show`.
 pub fn watch_for_second_launch(on_show: impl Fn() + Send + 'static) {
     std::thread::spawn(move || unsafe {
-        let ev = CreateEventW(std::ptr::null(), 0, 0, wide(EVENT_NAME).as_ptr());
+        let ev = CreateEventW(std::ptr::null(), 0, 0, wide(&names().1).as_ptr());
         if ev.is_null() {
             return;
         }

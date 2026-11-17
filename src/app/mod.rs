@@ -109,6 +109,7 @@ pub struct App {
     pub settings_msg: Option<String>,
     pub backups: Vec<(NaiveDate, PathBuf)>,
     pub sidebar_drag: Option<String>,
+    modal_was_open: bool,
     data_dirty: Option<f64>,
     cfg_dirty: Option<f64>,
     quitting: bool,
@@ -202,6 +203,7 @@ impl App {
             settings_msg: None,
             backups: storage::list_backups(&dir),
             sidebar_drag: None,
+            modal_was_open: false,
             data_dirty: None,
             cfg_dirty,
             quitting: false,
@@ -630,6 +632,10 @@ impl eframe::App for App {
             }
         });
 
+        let modal_open = self.dialog.is_some() || self.day_panel.is_some();
+        let gen = next_generation(self.modal_was_open, modal_open, modal_generation(&ctx));
+        ctx.data_mut(|d| d.insert_temp(Id::unique("modal-generation"), gen));
+        self.modal_was_open = modal_open;
         self.day_panel_ui(&ctx, &p);
         self.dialog_ui(&ctx, &p);
         self.picker_ui(&ctx, &p);
@@ -659,4 +665,41 @@ pub fn below(r: Rect) -> egui::Pos2 {
 
 pub fn id_of(s: &str) -> Id {
     Id::unique(("planora", s))
+}
+
+/// Current modal generation (see `dialogs::modal`).
+pub fn modal_generation(ctx: &egui::Context) -> u64 {
+    ctx.data(|d| d.get_temp::<u64>(Id::unique("modal-generation"))).unwrap_or(0)
+}
+
+/// Pure rule: a new generation starts whenever a modal opens after none was open.
+pub fn next_generation(was_open: bool, is_open: bool, gen: u64) -> u64 {
+    if is_open && !was_open { gen + 1 } else { gen }
+}
+
+#[cfg(test)]
+mod modal_tests {
+    use super::next_generation;
+
+    #[test]
+    fn every_reopening_gets_a_fresh_generation() {
+        let mut gen = 0;
+        let mut was_open = false;
+        let mut seen = vec![];
+        // open, close, open, close, open: three openings
+        for open in [true, true, false, true, false, false, true] {
+            gen = next_generation(was_open, open, gen);
+            was_open = open;
+            if open && seen.last() != Some(&gen) {
+                seen.push(gen);
+            }
+        }
+        assert_eq!(seen, vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn switching_between_modals_keeps_the_generation() {
+        assert_eq!(next_generation(true, true, 5), 5);
+        assert_eq!(next_generation(false, false, 5), 5);
+    }
 }
