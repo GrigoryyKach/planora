@@ -1,0 +1,28 @@
+[package]
+name = "planora"
+version = "1.0.0"
+edition = "2021"
+build = "build.rs"
+description = "A local, offline planner with a calendar, projects and reminders"
+
+[[bin]]
+name = "Planora"
+path = "src/main.rs"
+
+[dependencies]
+chrono = { version = "0.4.45", default-features = false, features = ["clock", "std", "serde"] }
+dirs = "7.0.0"
+eframe = { version = "0.37.0", default-features = false, features = ["default_fonts", "glow", "clipboard", "links"] }
+egui_extras = { version = "0.37.0", default-features = false, features = ["datepicker"] }
+rfd = "0.15.4"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+tauri-winrt-notification = "0.8.1"
+tray-icon = { version = "0.26.1", default-features = false }
+winreg = "0.56.0"
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse"] }
+
+[profile.release]
+opt-level = 3
+strip = true
+lto = true
