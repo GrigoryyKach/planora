@@ -46,6 +46,18 @@ impl App {
         }
     }
 
+    /// The tasks a list shows: scope, active filters and sort order (also used by the PDF export).
+    pub(super) fn list_rows(&self, scope: &Scope) -> Vec<&Task> {
+        let mut rows: Vec<&Task> = self.data.tasks.iter().filter(|x| self.scope_matches(scope, x) && self.passes_filter(x)).collect();
+        match self.cfg.sort {
+            SortMode::Manual => {}
+            SortMode::Deadline => rows.sort_by_key(|x| (x.deadline.is_none(), x.deadline)),
+            SortMode::Priority => rows.sort_by_key(|x| std::cmp::Reverse(x.priority)),
+            SortMode::Created => rows.sort_by_key(|x| std::cmp::Reverse(x.created)),
+        }
+        rows
+    }
+
     fn passes_filter(&self, t: &Task) -> bool {
         let f = &self.filter;
         if self.cfg.hide_done && t.is_closed() {
@@ -121,7 +133,7 @@ impl App {
             let (r, _) = ui.allocate_exact_size(vec2(14.0, 14.0), Sense::hover());
             ui.painter().rect_filled(r, 4.0, dot);
             ui.add(egui::Label::new(RichText::new(title).font(theme::bold(24.0)).color(p.text)).truncate());
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| self.header_right(ui, p, false));
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| self.header_right(ui, p, false, Some(super::export::ExportTarget::Scope(scope.clone()))));
         });
         ui.add_space(10.0);
 
@@ -155,13 +167,7 @@ impl App {
             ui.add_space(8.0);
 
             // Rows.
-            let mut rows: Vec<&Task> = self.data.tasks.iter().filter(|x| self.scope_matches(&scope, x) && self.passes_filter(x)).collect();
-            match self.cfg.sort {
-                SortMode::Manual => {}
-                SortMode::Deadline => rows.sort_by_key(|x| (x.deadline.is_none(), x.deadline)),
-                SortMode::Priority => rows.sort_by_key(|x| std::cmp::Reverse(x.priority)),
-                SortMode::Created => rows.sort_by_key(|x| std::cmp::Reverse(x.created)),
-            }
+            let rows = self.list_rows(&scope);
             if rows.is_empty() {
                 ui.add_space(30.0);
                 ui.vertical_centered(|ui| {

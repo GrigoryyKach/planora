@@ -67,12 +67,17 @@ pub fn paint_chip(
 
 impl App {
     /// Right side of the page header: profile filter, hide done, search and new task.
-    pub(super) fn header_right(&mut self, ui: &mut Ui, p: &Pal, with_filter: bool) {
+    pub(super) fn header_right(&mut self, ui: &mut Ui, p: &Pal, with_filter: bool, export: Option<super::export::ExportTarget>) {
         let ctx = ui.ctx().clone();
         let t = self.s();
         let rect = ui.allocate_exact_size(vec2(132.0, 36.0), Sense::hover()).0;
         if theme::gradient_button(ui, rect, ui.scope_id().with("new-task"), t.new_task, None, true, &self.tex, p).clicked() {
             self.open_quick_add(None);
+        }
+        if let Some(target) = export {
+            if theme::button(ui, t.export_pdf, Btn::Ghost, p).clicked() {
+                self.export_pdf(&ctx, target);
+            }
         }
         if widgets::icon_button(ui, Icon::Search, 34.0, p).on_hover_text(format!("{} (Ctrl+F)", t.search)).clicked() {
             self.dialog = Some(super::Dialog::Search { query: String::new(), focus: true });
@@ -119,7 +124,7 @@ impl App {
             if widgets::icon_button(ui, Icon::Right, 32.0, p).on_hover_text(format!("{} (PgDn)", t.next_month)).clicked() {
                 self.cal = calendar::shift_month(year, month, 1);
             }
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| self.header_right(ui, p, true));
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| self.header_right(ui, p, true, None));
         });
         ui.add_space(10.0);
 

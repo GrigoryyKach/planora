@@ -24,7 +24,7 @@ impl App {
                 ui.add_space(-6.0);
                 theme::hint(ui, &fmt::date_long(self.lang, today), p);
             });
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| self.header_right(ui, p, true));
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| self.header_right(ui, p, true, Some(super::export::ExportTarget::Day(today))));
         });
         ui.add_space(12.0);
 

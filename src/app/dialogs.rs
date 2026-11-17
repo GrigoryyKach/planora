@@ -29,6 +29,7 @@ pub enum Dialog {
     ConfirmRestore(PathBuf),
     Missed(Vec<Reminder>),
     Corrupt(PathBuf),
+    PdfSaved(PathBuf),
 }
 
 impl Dialog {

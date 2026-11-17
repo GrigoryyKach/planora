@@ -22,6 +22,7 @@ impl App {
             Dialog::ConfirmRestore(path) => self.confirm_restore(ctx, p, path),
             Dialog::Missed(list) => self.missed_dialog(ctx, p, list),
             Dialog::Corrupt(path) => self.corrupt_dialog(ctx, p, path),
+            Dialog::PdfSaved(path) => self.pdf_saved_dialog(ctx, p, path),
         };
         // An action inside may already have opened another dialog; that one wins.
         if self.dialog.is_none() {

@@ -9,6 +9,7 @@ mod model;
 #[allow(dead_code)]
 mod nimvoro;
 mod notify;
+mod pdf;
 mod platform;
 mod strings;
 #[allow(dead_code)]

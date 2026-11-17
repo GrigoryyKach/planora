@@ -173,6 +173,7 @@ impl App {
         let items = items_in_range(&self.data.tasks, day, day, self.cfg.filter, self.cfg.hide_done, self.today).remove(&day).unwrap_or_default();
         let mut close = false;
         let mut add = false;
+        let mut export = false;
         let mut action = None;
         let backdrop = modal(ctx, p, "day-panel", 520.0, |ui: &mut Ui| {
             ui.horizontal(|ui| {
@@ -198,10 +199,18 @@ impl App {
                 }
             });
             ui.add_space(10.0);
-            if primary(ui, self, t.add_on_day, 220.0, true, p) {
-                add = true;
-            }
+            ui.horizontal(|ui| {
+                if primary(ui, self, t.add_on_day, 220.0, true, p) {
+                    add = true;
+                }
+                if theme::button(ui, t.export_pdf, Btn::Ghost, p).clicked() {
+                    export = true;
+                }
+            });
         });
+        if export {
+            self.export_pdf(ctx, super::export::ExportTarget::Day(day));
+        }
         if add {
             self.day_panel = None;
             self.open_quick_add(Some(day));

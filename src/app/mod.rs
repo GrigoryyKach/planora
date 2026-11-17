@@ -24,6 +24,7 @@ use crate::tray::Tray;
 mod calendar_view;
 mod dialogs;
 mod editor;
+mod export;
 mod forms;
 mod list_view;
 mod overlays;

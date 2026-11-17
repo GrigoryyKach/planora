@@ -163,6 +163,15 @@ strings! {
         search_prompt: "Start typing to search all tasks.", "Начните вводить, чтобы искать по всем задачам.", "Почніть вводити, щоб шукати серед усіх завдань.";
         search_none: "No tasks found.", "Ничего не найдено.", "Нічого не знайдено.";
 
+        // PDF export
+        export_pdf: "Export PDF", "Экспорт в PDF", "Експорт у PDF";
+        pdf_saved: "PDF saved", "PDF сохранён", "PDF збережено";
+        show_in_folder: "Show in folder", "Показать в папке", "Показати в теці";
+        pdf_failed: "Could not create the PDF.", "Не удалось создать PDF.", "Не вдалося створити PDF.";
+        pdf_page: "Page {n} of {total}", "Страница {n} из {total}", "Сторінка {n} з {total}";
+        pdf_profile: "Profile: {p}", "Профиль: {p}", "Профіль: {p}";
+        pdf_deadline: "deadline", "дедлайн", "дедлайн";
+
         // Settings
         group_interface: "Interface", "Интерфейс", "Інтерфейс";
         group_behaviour: "Behaviour", "Поведение", "Поведінка";
