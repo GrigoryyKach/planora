@@ -86,11 +86,6 @@ pub fn occurrences(anchor: NaiveDate, rec: &Recurrence, from: NaiveDate, to: Nai
     out
 }
 
-/// Does `d` belong to the series?
-pub fn occurs_on(anchor: NaiveDate, rec: &Recurrence, d: NaiveDate) -> bool {
-    !occurrences(anchor, rec, d, d).is_empty()
-}
-
 /// First occurrence on or after `from` (searches two years ahead).
 pub fn next_occurrence(anchor: NaiveDate, rec: &Recurrence, from: NaiveDate) -> Option<NaiveDate> {
     occurrences(anchor, rec, from, from + Duration::days(800)).into_iter().next()

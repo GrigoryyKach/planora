@@ -56,6 +56,8 @@ pub struct Config {
     /// 24-hour clock (English may switch to 12-hour).
     pub time_24h: bool,
     pub close_to_tray: bool,
+    /// Sidebar shows icons only.
+    pub sidebar_collapsed: bool,
     /// Default "remind before", in minutes.
     pub default_remind: u32,
     pub notifications: bool,
@@ -79,6 +81,7 @@ impl Default for Config {
             week_starts_sunday: false,
             time_24h: true,
             close_to_tray: true,
+            sidebar_collapsed: false,
             default_remind: 10,
             notifications: true,
             personal_color: 0x4f6bff,
@@ -116,13 +119,6 @@ impl Config {
         }
     }
 
-    pub fn load() -> Self {
-        Self::load_from(&data_dir())
-    }
-
-    pub fn save(&self) {
-        self.save_to(&data_dir());
-    }
 }
 
 /// Runtime state shared between the app and the reminder thread (`state.json`).
