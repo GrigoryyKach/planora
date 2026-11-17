@@ -268,3 +268,10 @@ pub fn input(ui: &mut Ui, text: &mut String, hint: &str, width: f32) -> Response
     )
 }
 
+
+/// The app icon at `size` px (the texture is 512 px and filtered, so it stays crisp when scaled down).
+pub fn logo_image(ui: &mut Ui, tex: &egui::TextureHandle, size: f32) -> Response {
+    let (rect, resp) = ui.allocate_exact_size(vec2(size, size), Sense::click());
+    ui.painter().image(tex.id(), rect, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
+    resp
+}

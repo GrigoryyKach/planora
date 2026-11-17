@@ -81,15 +81,13 @@ impl App {
         let collapsed = self.cfg.sidebar_collapsed;
         let mut toggle = false;
         if collapsed {
-            let start = ui.cursor().min;
-            theme::logo(ui, 32.0, "P", &self.tex);
-            let resp = ui.interact(Rect::from_min_size(start, vec2(32.0, 32.0)), ui.scope_id().with("logo-toggle"), Sense::click());
+            let resp = widgets::logo_image(ui, &self.logo, 36.0);
             if resp.on_hover_cursor(CursorIcon::PointingHand).on_hover_text(t.expand_sidebar).clicked() {
                 toggle = true;
             }
         } else {
             ui.horizontal(|ui| {
-                theme::logo(ui, 32.0, "P", &self.tex);
+                widgets::logo_image(ui, &self.logo, 36.0);
                 ui.add_space(2.0);
                 ui.label(RichText::new("Planora").font(theme::bold(18.0)).color(p.text));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {

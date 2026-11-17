@@ -88,6 +88,8 @@ pub struct App {
     pub dir: PathBuf,
     pub data: Data,
     pub tex: Textures,
+    /// The real app icon (assets/icon.png), decoded once.
+    pub logo: egui::TextureHandle,
     pub updater: Updater,
     pub worker: Worker,
     pub tray: Option<Tray>,
@@ -176,6 +178,11 @@ impl App {
         Self {
             lang,
             tex: Textures::new(&cc.egui_ctx),
+            logo: {
+                let img = eframe::icon_data::from_png_bytes(ICON_PNG).unwrap_or_default();
+                let ci = egui::ColorImage::from_rgba_unmultiplied([img.width as usize, img.height as usize], &img.rgba);
+                cc.egui_ctx.load_texture("app-logo", ci, egui::TextureOptions::LINEAR)
+            },
             updater,
             worker,
             tray,

@@ -232,7 +232,7 @@ impl App {
             // ── About
             group(ui, p, t.about, |ui| {
                 ui.horizontal(|ui| {
-                    theme::logo(ui, 36.0, "P", &self.tex);
+                    widgets::logo_image(ui, &self.logo, 40.0);
                     ui.vertical(|ui| {
                         ui.label(RichText::new("Planora").font(theme::semi(15.0)).color(p.text));
                         ui.add_space(-6.0);
