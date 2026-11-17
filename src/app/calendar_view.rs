@@ -82,7 +82,7 @@ impl App {
                 self.export_pdf(&ctx, target);
             }
         }
-        if widgets::icon_button(ui, Icon::Search, 34.0, p).on_hover_text(format!("{} (Ctrl+F)", t.search)).clicked() {
+        if !narrow && widgets::icon_button(ui, Icon::Search, 34.0, p).on_hover_text(format!("{} (Ctrl+F)", t.search)).clicked() {
             self.dialog = Some(super::Dialog::Search { query: String::new(), focus: true });
         }
         if with_filter {
@@ -98,7 +98,7 @@ impl App {
                 self.touch_cfg(&ctx);
             }
         }
-        if with_filter {
+        if with_filter && !narrow {
             self.hide_done_toggle(ui, p, narrow);
         }
     }

@@ -242,8 +242,8 @@ mod tests {
         let bytes = render(&doc(100)).unwrap();
         let parsed = PdfDocument::parse(&bytes, &printpdf::PdfParseOptions::default(), &mut Vec::new()).unwrap();
         assert!(parsed.pages.len() >= 3, "pages: {}", parsed.pages.len());
-        // The font is subset: much smaller than the two bundled fonts together.
-        assert!(bytes.len() < 700_000, "size {}", bytes.len());
+        // The bundled fonts are pre-subset to Latin + Cyrillic (tools/subset_fonts.py).
+        assert!(bytes.len() < 300_000, "size {}", bytes.len());
     }
 
     #[test]

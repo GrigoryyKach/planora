@@ -1,0 +1,133 @@
+{
+  "schema": 1,
+  "id": "planora",
+  "name": "Planora",
+  "tagline": "A calm planner for tasks, projects and your calendar",
+  "description": "Plan your life and your work in one place. Two profiles, Personal and Work, share one calendar. Keep quick tasks and projects, set deadlines and reminders, and see the month at a glance. Everything stays on your PC: no account, no cloud, works offline.",
+  "features": [
+    {
+      "title": "Personal and Work",
+      "text": "Two profiles with an Inbox and projects each, and one shared calendar that you can filter to All, Personal or Work."
+    },
+    {
+      "title": "Month calendar",
+      "text": "Square day cells with task chips for planned tasks and deadlines. Drag a chip to another day to reschedule it."
+    },
+    {
+      "title": "Reminders",
+      "text": "A Windows notification at the exact time, 5 to 30 minutes ahead if you like. Planora waits in the tray and shows reminders you missed while it was off."
+    },
+    {
+      "title": "Projects and lists",
+      "text": "Progress cards, filters by status, priority and deadline, sorting, and quick actions on every row: cycle the status, set dates, move or duplicate."
+    },
+    {
+      "title": "Repeats and checklists",
+      "text": "Daily, weekday, weekly, monthly or every N days, with an end date. Completing one repeat keeps the series open. Add checklist items and track 2/5 progress."
+    },
+    {
+      "title": "Export to PDF",
+      "text": "Turn a project, the inbox or a single day into a clean task list with checkboxes."
+    },
+    {
+      "title": "Yours, offline",
+      "text": "Autosave, a daily backup (the last 14 are kept), JSON export and import. English, Russian and Ukrainian, light and dark themes."
+    }
+  ],
+  "category": "Productivity",
+  "accent": [
+    "#4f6bff",
+    "#8a5bff"
+  ],
+  "icon": "assets/icon.png",
+  "screenshots": [
+    "assets/screenshots/1.png",
+    "assets/screenshots/2.png",
+    "assets/screenshots/3.png",
+    "assets/screenshots/4.png"
+  ],
+  "exe": "Planora.exe",
+  "asset": "Planora-win-x64.zip",
+  "requirements": [
+    "Windows 10/11 x64"
+  ],
+  "settingsDir": "%APPDATA%\\Planora",
+  "i18n": {
+    "ru": {
+      "tagline": "Спокойный планировщик задач, проектов и календаря",
+      "description": "Планируйте жизнь и работу в одном месте. Два профиля, «Личное» и «Работа», делят один календарь. Ведите быстрые задачи и проекты, ставьте дедлайны и напоминания, смотрите на месяц целиком. Все данные остаются на вашем ПК: без аккаунта и облака, работает офлайн.",
+      "category": "Продуктивность",
+      "features": [
+        {
+          "title": "Личное и Работа",
+          "text": "Два профиля, у каждого свои «Входящие» и проекты, и один общий календарь с фильтром: все, только личное или только работа."
+        },
+        {
+          "title": "Календарь на месяц",
+          "text": "Квадратные ячейки дней с плашками задач и дедлайнов. Перетащите плашку на другой день, чтобы перенести задачу."
+        },
+        {
+          "title": "Напоминания",
+          "text": "Уведомление Windows в точное время или за 5–30 минут. Planora ждёт в трее и показывает напоминания, пропущенные, пока она была выключена."
+        },
+        {
+          "title": "Проекты и списки",
+          "text": "Карточки с прогрессом, фильтры по статусу, приоритету и дедлайну, сортировка и быстрые действия в каждой строке: смена статуса, даты, перенос, дубликат."
+        },
+        {
+          "title": "Повторы и чек-листы",
+          "text": "Каждый день, по будням, неделю, месяц или раз в N дней, с датой окончания. Выполнение одного повтора не закрывает серию. Чек-лист показывает прогресс, например 2/5."
+        },
+        {
+          "title": "Экспорт в PDF",
+          "text": "Превратите проект, «Входящие» или один день в аккуратный список задач с галочками."
+        },
+        {
+          "title": "Ваше и офлайн",
+          "text": "Автосохранение, ежедневная копия (хранятся последние 14), экспорт и импорт JSON. Русский, украинский и английский, светлая и тёмная темы."
+        }
+      ],
+      "requirements": [
+        "Windows 10/11 x64"
+      ]
+    },
+    "uk": {
+      "tagline": "Спокійний планувальник завдань, проєктів і календаря",
+      "description": "Плануйте життя й роботу в одному місці. Два профілі, «Особисте» і «Робота», ділять один календар. Ведіть швидкі завдання та проєкти, ставте дедлайни й нагадування, дивіться на місяць цілком. Усі дані лишаються на вашому ПК: без акаунта й хмари, працює офлайн.",
+      "category": "Продуктивність",
+      "features": [
+        {
+          "title": "Особисте і Робота",
+          "text": "Два профілі, у кожного свої «Вхідні» та проєкти, і один спільний календар із фільтром: усе, лише особисте або лише робота."
+        },
+        {
+          "title": "Календар на місяць",
+          "text": "Квадратні клітинки днів із плашками завдань і дедлайнів. Перетягніть плашку на інший день, щоб перенести завдання."
+        },
+        {
+          "title": "Нагадування",
+          "text": "Сповіщення Windows у точний час або за 5–30 хвилин. Planora чекає в треї й показує нагадування, пропущені, поки вона була вимкнена."
+        },
+        {
+          "title": "Проєкти та списки",
+          "text": "Картки з прогресом, фільтри за статусом, пріоритетом і дедлайном, сортування та швидкі дії в кожному рядку: зміна статусу, дати, перенесення, дублікат."
+        },
+        {
+          "title": "Повтори та чекліст",
+          "text": "Щодня, у будні, щотижня, щомісяця або раз на N днів, із датою завершення. Виконання одного повтору не закриває серію. Чекліст показує прогрес, наприклад 2/5."
+        },
+        {
+          "title": "Експорт у PDF",
+          "text": "Перетворіть проєкт, «Вхідні» або один день на охайний список завдань із галочками."
+        },
+        {
+          "title": "Ваше й офлайн",
+          "text": "Автозбереження, щоденна копія (зберігаються останні 14), експорт та імпорт JSON. Українська, російська й англійська, світла й темна теми."
+        }
+      ],
+      "requirements": [
+        "Windows 10/11 x64"
+      ]
+    }
+  }
+}
