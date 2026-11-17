@@ -12,6 +12,7 @@ mod notify;
 mod pdf;
 mod platform;
 mod strings;
+mod support;
 #[allow(dead_code)]
 mod theme;
 mod tray;

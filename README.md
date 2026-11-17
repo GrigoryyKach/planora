@@ -88,3 +88,7 @@ Other tools: `tools/make_icon.py` redraws the icon, `tools/subset_fonts.py` re-s
 ## Licence notes
 
 The PDF export embeds a Latin and Cyrillic subset of Noto Sans, licensed under the SIL Open Font License 1.1 (`assets/fonts/OFL.txt`).
+
+## Support
+
+If you find this app useful, you can support its development: <https://donatello.to/MicsGame>

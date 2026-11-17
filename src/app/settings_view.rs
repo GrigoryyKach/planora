@@ -10,6 +10,7 @@ use crate::model::storage;
 use crate::model::Profile;
 use crate::nimvoro::{self, UpdateState};
 use crate::platform;
+use crate::support;
 use crate::theme::{self, Btn, Pal};
 use eframe::egui::{self, Align, Frame, Layout, Margin, RichText, ScrollArea, Stroke, Ui};
 
@@ -233,6 +234,11 @@ impl App {
                         }
                     });
                 });
+            });
+
+            // ── Support the author
+            group(ui, p, support::title(self.lang), |ui| {
+                support::support_body(ui, self.lang);
             });
 
             // ── About
