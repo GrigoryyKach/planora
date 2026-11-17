@@ -111,10 +111,12 @@ pub struct App {
     cfg_dirty: Option<f64>,
     quitting: bool,
     last_nav: Nav,
+    /// Frames left in which a `--minimized` start keeps the window hidden (the runtime shows it after the first paint).
+    hide_frames: u8,
 }
 
 impl App {
-    pub fn new(cc: &eframe::CreationContext<'_>, mut cfg: Config, dir: PathBuf) -> Self {
+    pub fn new(cc: &eframe::CreationContext<'_>, mut cfg: Config, dir: PathBuf, start_hidden: bool) -> Self {
         theme::install(&cc.egui_ctx, cfg.theme);
         let lang = i18n::resolve(cfg.language.as_deref());
         let mut cfg_dirty = None;
@@ -132,7 +134,7 @@ impl App {
         if std::fs::read(&icon_path).map(|b| b != ICON_PNG).unwrap_or(true) {
             let _ = std::fs::write(&icon_path, ICON_PNG);
         }
-        notify::register_identity(&icon_path);
+        notify::register_identity();
 
         let state = State::load_from(&dir);
         let missed: Vec<Reminder> = match state.last_tick {
@@ -197,6 +199,7 @@ impl App {
             cfg_dirty,
             quitting: false,
             last_nav,
+            hide_frames: if start_hidden { 4 } else { 0 },
             cfg,
             dir,
             data,
@@ -378,6 +381,9 @@ impl App {
 
     pub fn go(&mut self, ctx: &egui::Context, nav: Nav) {
         if self.cfg.nav != nav {
+            if nav == Nav::Settings {
+                self.editor = None;
+            }
             self.cfg.nav = nav;
             self.filter = ListFilter::default();
             self.touch_cfg(ctx);
@@ -543,6 +549,11 @@ impl eframe::App for App {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.now = Local::now().naive_local();
         self.today = self.now.date();
+        if self.hide_frames > 0 && !bus::pending() {
+            self.hide_frames -= 1;
+            platform::hide_main_window();
+            ctx.request_repaint();
+        }
         self.handle_commands(ctx);
 
         // Close button: hide to the tray instead of quitting.
@@ -596,7 +607,7 @@ impl eframe::App for App {
 
         if self.editor.is_some() {
             egui::Panel::right("editor")
-                .exact_size(400.0)
+                .exact_size(372.0)
                 .resizable(false)
                 .frame(Frame::new().fill(p.sidebar).inner_margin(Margin { left: 20, right: 14, top: 18, bottom: 12 }))
                 .show(ui, |ui| self.editor_panel(ui, &p));

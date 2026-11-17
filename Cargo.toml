@@ -20,6 +20,7 @@ tauri-winrt-notification = "0.8.1"
 tray-icon = { version = "0.26.1", default-features = false }
 winreg = "0.56.0"
 printpdf = { version = "0.12.9", default-features = false }
+windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_UI_Shell", "Win32_UI_Shell_PropertiesSystem", "Win32_Storage_EnhancedStorage", "Win32_System_Variant"] }
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging", "Win32_Security"] }
 
 [profile.release]

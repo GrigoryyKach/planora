@@ -50,7 +50,7 @@ fn main() -> eframe::Result<()> {
         _ => viewport = viewport.with_inner_size([1280.0, 820.0]),
     }
     let options = eframe::NativeOptions { viewport, centered, ..Default::default() };
-    eframe::run_native(platform::WINDOW_TITLE, options, Box::new(move |cc| Ok(Box::new(app::App::new(cc, cfg, dir)))))
+    eframe::run_native(platform::WINDOW_TITLE, options, Box::new(move |cc| Ok(Box::new(app::App::new(cc, cfg, dir, minimized)))))
 }
 
 /// Window icon from `assets/icon.png` (the same artwork that is embedded in the exe).

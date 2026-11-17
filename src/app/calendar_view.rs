@@ -70,8 +70,11 @@ impl App {
     pub(super) fn header_right(&mut self, ui: &mut Ui, p: &Pal, with_filter: bool, export: Option<super::export::ExportTarget>) {
         let ctx = ui.ctx().clone();
         let t = self.s();
-        let rect = ui.allocate_exact_size(vec2(132.0, 36.0), Sense::hover()).0;
-        if theme::gradient_button(ui, rect, ui.scope_id().with("new-task"), t.new_task, None, true, &self.tex, p).clicked() {
+        // With the editor open there is little room: the button shrinks to "+" and labels go.
+        let narrow = ui.available_width() < 560.0;
+        let rect = ui.allocate_exact_size(vec2(if narrow { 38.0 } else { 132.0 }, 36.0), Sense::hover()).0;
+        let label = if narrow { "+" } else { t.new_task };
+        if theme::gradient_button(ui, rect, ui.scope_id().with("new-task"), label, None, true, &self.tex, p).on_hover_text(format!("{} (Ctrl+N)", t.new_task)).clicked() {
             self.open_quick_add(None);
         }
         if let Some(target) = export {
@@ -95,17 +98,21 @@ impl App {
                 self.touch_cfg(&ctx);
             }
         }
-        self.hide_done_toggle(ui, p);
+        if with_filter {
+            self.hide_done_toggle(ui, p, narrow);
+        }
     }
 
-    pub(super) fn hide_done_toggle(&mut self, ui: &mut Ui, p: &Pal) {
+    pub(super) fn hide_done_toggle(&mut self, ui: &mut Ui, p: &Pal, narrow: bool) {
         let ctx = ui.ctx().clone();
         let mut hide = self.cfg.hide_done;
-        if theme::switch(ui, &mut hide, p).changed() {
+        if theme::switch(ui, &mut hide, p).on_hover_text(self.s().hide_done).changed() {
             self.cfg.hide_done = hide;
             self.touch_cfg(&ctx);
         }
-        ui.label(RichText::new(self.s().hide_done).font(theme::reg(13.0)).color(p.muted));
+        if !narrow {
+            ui.label(RichText::new(self.s().hide_done).font(theme::reg(13.0)).color(p.muted));
+        }
     }
 
     pub(super) fn calendar_view(&mut self, ui: &mut Ui, p: &Pal) {

@@ -13,25 +13,80 @@ use crate::model::Task;
 use crate::strings;
 use chrono::{Duration, Local, NaiveDateTime};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 
 const AUMID: &str = "Planora.App";
 
-/// Registers the toast identity (name and icon). `icon_png` must be a real file on disk.
-pub fn register_identity(icon_png: &std::path::Path) {
-    use winreg::{enums::HKEY_CURRENT_USER, RegKey};
-    let path = format!("Software\\Classes\\AppUserModelId\\{AUMID}");
-    if let Ok((key, _)) = RegKey::predef(HKEY_CURRENT_USER).create_subkey(path) {
-        let _ = key.set_value("DisplayName", &"Planora");
-        let _ = key.set_value("IconUri", &icon_png.display().to_string());
-        let _ = key.set_value("IconBackgroundColor", &"00FFFFFF");
+static IDENTITY_OK: AtomicBool = AtomicBool::new(false);
+
+/// Windows only shows toasts for an AppUserModelID that belongs to a Start-menu shortcut.
+/// This tags (or creates) `Start Menu\Programs\Planora.lnk` with the ID. The NIMVORO launcher creates
+/// the same shortcut at install time; we only add the ID. With `PLANORA_DATA_DIR` set (tests, screenshots)
+/// a separate `Planora (test).lnk` is used so a real shortcut is never touched.
+/// Returns `false` when it failed; toasts then go out under the PowerShell identity instead.
+pub fn register_identity() -> bool {
+    let ok = tag_shortcut().is_ok();
+    IDENTITY_OK.store(ok, Ordering::Relaxed);
+    ok
+}
+
+/// Path of the Start-menu shortcut used for the toast identity.
+pub fn shortcut_path() -> Option<PathBuf> {
+    let name = if std::env::var_os("PLANORA_DATA_DIR").is_some() { "Planora (test).lnk" } else { "Planora.lnk" };
+    Some(dirs::config_dir()?.join("Microsoft").join("Windows").join("Start Menu").join("Programs").join(name))
+}
+
+fn tag_shortcut() -> windows::core::Result<()> {
+    use windows::core::{Interface, PCWSTR};
+    use windows::Win32::Storage::EnhancedStorage::PKEY_AppUserModel_ID;
+    use windows::Win32::System::Com::StructuredStorage::PROPVARIANT;
+    use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, IPersistFile, CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED, STGM_READWRITE};
+    use windows::Win32::UI::Shell::PropertiesSystem::IPropertyStore;
+    use windows::Win32::UI::Shell::{IShellLinkW, ShellLink};
+
+    let path = shortcut_path().ok_or_else(windows::core::Error::empty)?;
+    let exe = std::env::current_exe().map_err(|_| windows::core::Error::empty())?;
+    let wide = |p: &std::path::Path| -> Vec<u16> { p.as_os_str().to_string_lossy().encode_utf16().chain(std::iter::once(0)).collect() };
+    unsafe {
+        // The UI toolkit may have initialised COM already; either result is fine.
+        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        let link: IShellLinkW = CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER)?;
+        let file: IPersistFile = link.cast()?;
+        let wpath = wide(&path);
+        let existed = path.exists();
+        if existed {
+            file.Load(PCWSTR(wpath.as_ptr()), STGM_READWRITE)?;
+        } else {
+            let wexe = wide(&exe);
+            link.SetPath(PCWSTR(wexe.as_ptr()))?;
+            link.SetIconLocation(PCWSTR(wexe.as_ptr()), 0)?;
+            let desc = wide(std::path::Path::new("Planora"));
+            link.SetDescription(PCWSTR(desc.as_ptr()))?;
+        }
+        let store: IPropertyStore = link.cast()?;
+        if existed {
+            if let Ok(v) = store.GetValue(&PKEY_AppUserModel_ID) {
+                if v.to_string() == AUMID {
+                    return Ok(());
+                }
+            }
+        }
+        store.SetValue(&PKEY_AppUserModel_ID, &PROPVARIANT::from(AUMID))?;
+        store.Commit()?;
+        if let Some(dir) = path.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        file.Save(PCWSTR(wpath.as_ptr()), true)?;
     }
+    Ok(())
 }
 
 /// Shows one toast. Clicking it opens the task.
-pub fn toast(title: &str, body: &str, icon_png: &std::path::Path, task_id: Option<String>) {
+pub fn toast(title: &str, body: &str, icon_png: &std::path::Path, task_id: Option<String>) -> Result<(), String> {
     use tauri_winrt_notification::{IconCrop, Toast};
-    let mut t = Toast::new(AUMID).title(title).text1(body).icon(icon_png, IconCrop::Square, "Planora");
+    let id = if IDENTITY_OK.load(Ordering::Relaxed) { AUMID } else { Toast::POWERSHELL_APP_ID };
+    let mut t = Toast::new(id).title(title).text1(body).icon(icon_png, IconCrop::Square, "Planora");
     t = t.on_activated(move |_| {
         crate::platform::show_main_window();
         match &task_id {
@@ -40,7 +95,7 @@ pub fn toast(title: &str, body: &str, icon_png: &std::path::Path, task_id: Optio
         }
         Ok(())
     });
-    let _ = t.show();
+    t.show().map_err(|e| e.to_string())
 }
 
 /// Text under the title: "In 10 min · 14:30" or "Now · 14:30" (with the date when it is not today).
@@ -123,7 +178,13 @@ fn run(shared: Arc<(Mutex<Shared>, Condvar)>, dir: PathBuf, icon_png: PathBuf) {
             // Fire without holding the lock so the UI is never blocked by WinRT.
             drop(guard);
             for r in &due {
-                toast(&r.title, &reminder_body(lang, r, now.date(), h24), &icon_png, Some(r.task_id.clone()));
+                if let Err(e) = toast(&r.title, &reminder_body(lang, r, now.date(), h24), &icon_png, Some(r.task_id.clone())) {
+                    // A failed toast must not be silent: leave a note next to the data.
+                    use std::io::Write;
+                    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(dir.join("notify.log")) {
+                        let _ = writeln!(f, "{} toast failed: {e}", now.format("%Y-%m-%d %H:%M:%S"));
+                    }
+                }
             }
             State { last_tick: Some(now) }.save_to(&dir);
             last_saved = now;

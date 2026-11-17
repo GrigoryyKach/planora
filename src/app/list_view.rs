@@ -323,7 +323,7 @@ impl App {
                 self.touch_cfg(&ctx);
             }
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                self.hide_done_toggle(ui, p);
+                self.hide_done_toggle(ui, p, false);
                 if self.filter.status.iter().any(|b| *b) || self.filter.priority.iter().any(|b| *b) || self.filter.deadline != 0 || !self.filter.text.is_empty() {
                     if theme::button(ui, t.clear_filters, Btn::Link, p).clicked() {
                         self.filter = Default::default();
