@@ -48,7 +48,14 @@ pub fn migrate(mut value: serde_json::Value) -> Result<Data, String> {
     }
     // v0 -> v1: files written before the schema field existed only need it stamped;
     // every other field has a serde default.
-    if version < 1 {
+    // v1 -> v2: deadlines may carry a time. Old deadlines are date-only, so every task gets an explicit
+    // `deadline_time: null` and keeps behaving exactly as before.
+    if version < 2 {
+        if let Some(tasks) = obj.get_mut("tasks").and_then(|t| t.as_array_mut()) {
+            for t in tasks.iter_mut().filter_map(|t| t.as_object_mut()) {
+                t.entry("deadline_time").or_insert(serde_json::Value::Null);
+            }
+        }
         obj.insert("version".into(), SCHEMA_VERSION.into());
     }
     let mut data: Data = serde_json::from_value(value).map_err(|e| e.to_string())?;
@@ -180,6 +187,28 @@ mod tests {
         assert_eq!(d.version, SCHEMA_VERSION);
         assert_eq!(d.tasks[0].title, "Old");
         assert!(d.tasks[0].links.is_empty());
+    }
+
+    #[test]
+    fn migrates_v1_date_only_deadlines_to_v2() {
+        let v1 = r#"{"version":1,"projects":[],"tasks":[{"id":"a","profile":"work","title":"Report","deadline":"2026-11-20","created":"2026-11-01T10:00:00","updated":"2026-11-01T10:00:00"}]}"#;
+        let d = parse(v1).unwrap();
+        assert_eq!(d.version, SCHEMA_VERSION);
+        assert_eq!(d.tasks[0].deadline, NaiveDate::from_ymd_opt(2026, 11, 20));
+        assert_eq!(d.tasks[0].deadline_time, None);
+        // A migrated file round-trips as schema 2.
+        let again = parse(&serde_json::to_string(&d).unwrap()).unwrap();
+        assert_eq!(again, d);
+    }
+
+    #[test]
+    fn deadline_time_round_trips() {
+        let dir = tmp("dltime");
+        let mut d = sample();
+        d.tasks[0].deadline_time = chrono::NaiveTime::from_hms_opt(17, 30, 0);
+        save(&dir, &d, day(11, 17)).unwrap();
+        assert_eq!(load(&dir, "x").0.tasks[0].deadline_time, chrono::NaiveTime::from_hms_opt(17, 30, 0));
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]

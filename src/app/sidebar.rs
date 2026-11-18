@@ -110,11 +110,11 @@ impl App {
         ScrollArea::vertical().max_height(h).auto_shrink([false, false]).show(ui, |ui| {
             ui.spacing_mut().item_spacing.y = 2.0;
             let cur = self.cfg.nav.clone();
-            let today_count = items_in_range(&self.data.tasks, self.today, self.today, ProfileFilter::All, true, self.today)
+            let today_count = items_in_range(&self.data.tasks, self.today, self.today, ProfileFilter::All, true, self.now)
                 .values()
                 .map(|v| v.len())
                 .sum::<usize>();
-            let overdue = overdue_items(&self.data.tasks, self.today, ProfileFilter::All).len();
+            let overdue = overdue_items(&self.data.tasks, self.now, ProfileFilter::All).len();
             let row = |icon, label, counts, selected| Row { icon: Some(icon), dot: None, label, counts, selected, collapsed, draggable: false };
             if nav_row(ui, p, row(Icon::Today, t.today, (overdue, today_count), cur == Nav::Today)).clicked() {
                 nav = Some(Nav::Today);
@@ -207,7 +207,7 @@ impl App {
                     ui.horizontal(|ui| {
                         ui.add_space(10.0);
                         let label = if self.show_archived { t.hide_archived } else { t.show_archived_label };
-                        if theme::button(ui, label, theme::Btn::Link, p).clicked() {
+                        if widgets::btn(ui, label, theme::Btn::Link, p).clicked() {
                             self.show_archived = !self.show_archived;
                         }
                     });

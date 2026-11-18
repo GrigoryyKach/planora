@@ -9,8 +9,10 @@ use chrono::{Duration, NaiveDate, NaiveDateTime};
 pub struct Reminder {
     pub task_id: Id,
     pub title: String,
-    /// When the task happens.
+    /// When the task happens (its plan time or its deadline time).
     pub event: NaiveDateTime,
+    /// The reminder is for the deadline, not for the plan time.
+    pub deadline: bool,
     /// When the reminder fires (`event` minus `before` minutes).
     pub at: NaiveDateTime,
     pub before: u32,
@@ -29,15 +31,33 @@ pub fn before_minutes(task: &Task, default_before: u32) -> Option<u32> {
     .map(|m| m.min(MAX_BEFORE))
 }
 
-/// Task times (with date) of the open occurrences whose day lies in `from..=to`.
-fn events(task: &Task, from: NaiveDate, to: NaiveDate) -> Vec<NaiveDateTime> {
-    let (Some(day), Some(time)) = (task.scheduled, task.time) else { return Vec::new() };
-    let days = match &task.recurrence {
-        Some(rec) => occurrences(day, rec, from, to),
-        None if (from..=to).contains(&day) => vec![day],
-        None => Vec::new(),
-    };
-    days.into_iter().filter(|d| !is_done_on(task, *d)).map(|d| d.and_time(time)).collect()
+/// Exact moments of the open occurrences whose day lies in `from..=to`: plan times and deadline times.
+/// The flag is `true` for a deadline. One reminder setting (`Task::remind`) applies to both kinds.
+fn events(task: &Task, from: NaiveDate, to: NaiveDate) -> Vec<(NaiveDateTime, bool)> {
+    let mut out = Vec::new();
+    if let (Some(day), Some(time)) = (task.scheduled, task.time) {
+        let days = match &task.recurrence {
+            Some(rec) => occurrences(day, rec, from, to),
+            None if (from..=to).contains(&day) => vec![day],
+            None => Vec::new(),
+        };
+        out.extend(days.into_iter().filter(|d| !is_done_on(task, *d)).map(|d| (d.and_time(time), false)));
+    }
+    if let (Some(dl), Some(time)) = (task.deadline, task.deadline_time) {
+        match (&task.recurrence, task.anchor()) {
+            (Some(rec), Some(anchor)) => {
+                let off = dl - anchor;
+                for o in occurrences(anchor, rec, from - off, to - off) {
+                    if !is_done_on(task, o) {
+                        out.push(((o + off).and_time(time), true));
+                    }
+                }
+            }
+            _ if (from..=to).contains(&dl) && !is_done_on(task, dl) => out.push((dl.and_time(time), true)),
+            _ => {}
+        }
+    }
+    out
 }
 
 /// Reminders that fire in `(after, upto]`, ordered by time.
@@ -50,14 +70,14 @@ pub fn reminders_between(tasks: &[Task], default_before: u32, after: NaiveDateTi
     let to = (upto + Duration::minutes(MAX_BEFORE as i64)).date();
     for t in tasks {
         let Some(before) = before_minutes(t, default_before) else { continue };
-        for event in events(t, from, to) {
+        for (event, deadline) in events(t, from, to) {
             let at = event - Duration::minutes(before as i64);
             if at > after && at <= upto {
-                out.push(Reminder { task_id: t.id.clone(), title: t.title.clone(), event, at, before });
+                out.push(Reminder { task_id: t.id.clone(), title: t.title.clone(), event, deadline, at, before });
             }
         }
     }
-    out.sort_by(|a, b| a.at.cmp(&b.at).then_with(|| a.task_id.cmp(&b.task_id)));
+    out.sort_by(|a, b| a.at.cmp(&b.at).then_with(|| a.task_id.cmp(&b.task_id)).then_with(|| a.deadline.cmp(&b.deadline)));
     out
 }
 
@@ -152,6 +172,46 @@ mod tests {
         // lookback limit
         let m = missed_reminders(&[a], 10, dt(2026, 1, 1, 0, 0), dt(2026, 11, 17, 8, 0), 1);
         assert!(m.is_empty());
+    }
+
+    fn with_deadline(title: &str, day: NaiveDate, h: u32, mi: u32) -> Task {
+        let mut t = Task::new(Profile::Work, title, dt(2026, 11, 1, 0, 0));
+        t.deadline = Some(day);
+        t.deadline_time = NaiveTime::from_hms_opt(h, mi, 0);
+        t
+    }
+
+    #[test]
+    fn deadline_time_gets_a_reminder_with_the_shared_setting() {
+        let mut t = with_deadline("report due", day(2026, 11, 20), 17, 0);
+        t.remind = Remind::Min(30);
+        let r = next_reminder(&[t.clone()], 10, dt(2026, 11, 19, 0, 0)).unwrap();
+        assert!(r.deadline);
+        assert_eq!(r.event, dt(2026, 11, 20, 17, 0));
+        assert_eq!(r.at, dt(2026, 11, 20, 16, 30));
+        // A date-only deadline has no reminder.
+        t.deadline_time = None;
+        assert!(next_reminder(&[t], 10, dt(2026, 11, 19, 0, 0)).is_none());
+    }
+
+    #[test]
+    fn plan_and_deadline_each_remind_and_done_silences_both() {
+        let mut t = timed("both", day(2026, 11, 18), 9, 0);
+        t.deadline = Some(day(2026, 11, 20));
+        t.deadline_time = NaiveTime::from_hms_opt(17, 0, 0);
+        let all = reminders_between(&[t.clone()], 10, dt(2026, 11, 17, 0, 0), dt(2026, 11, 21, 0, 0));
+        assert_eq!(all.len(), 2);
+        assert!(!all[0].deadline && all[1].deadline);
+        t.status = Some(Status::Done);
+        assert!(reminders_between(&[t], 10, dt(2026, 11, 17, 0, 0), dt(2026, 11, 21, 0, 0)).is_empty());
+    }
+
+    #[test]
+    fn missed_deadline_reminders_are_listed() {
+        let t = with_deadline("due while off", day(2026, 11, 16), 12, 0);
+        let m = missed_reminders(&[t], 10, dt(2026, 11, 15, 12, 0), dt(2026, 11, 17, 8, 0), 14);
+        assert_eq!(m.len(), 1);
+        assert!(m[0].deadline);
     }
 
     #[test]

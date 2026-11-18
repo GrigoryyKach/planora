@@ -7,7 +7,7 @@ use crate::model::reminders::Reminder;
 use crate::model::{Data, Profile, Project};
 use crate::theme::{self, Pal};
 use chrono::NaiveDate;
-use eframe::egui::{self, Align2, Color32, CursorIcon, Frame, Margin, Order, Sense, Stroke, Ui, vec2};
+use eframe::egui::{self, Align2, Color32, CursorIcon, Frame, Margin, Order, Rect, Sense, Stroke, Ui, vec2};
 use std::path::PathBuf;
 
 pub struct ProjectForm {
@@ -85,9 +85,46 @@ pub(super) fn modal(ctx: &egui::Context, p: &Pal, name: &str, width: f32, add: i
     dim.inner.clicked()
 }
 
-pub(super) fn primary(ui: &mut Ui, app: &App, label: &str, w: f32, enabled: bool, p: &Pal) -> bool {
-    let (rect, _) = ui.allocate_exact_size(vec2(w, 38.0), Sense::hover());
-    theme::gradient_button(ui, rect, ui.scope_id().with(("primary", label)), label, None, enabled, &app.tex, p).clicked() && enabled
+/// What was clicked in a modal footer.
+#[derive(Default)]
+pub(super) struct FooterOut {
+    pub left: bool,
+    /// Index into the `secondary` labels.
+    pub secondary: Option<usize>,
+    pub primary: bool,
+}
+
+/// The one footer every modal uses: all buttons are 38 px tall with the same minimum width, the accent
+/// button is rightmost, the secondary (ghost) buttons sit to its left, an optional ghost button sits at the far left.
+pub(super) fn footer(ui: &mut Ui, app: &App, p: &Pal, left: Option<&str>, secondary: &[&str], primary: &str, enabled: bool) -> FooterOut {
+    const H: f32 = 38.0;
+    const GAP: f32 = 8.0;
+    let (row, _) = ui.allocate_exact_size(vec2(ui.available_width(), H), Sense::hover());
+    let painter = ui.painter().clone();
+    let width = |label: &str| (painter.layout_no_wrap(label.to_string(), theme::semi(13.5), p.text).size().x + 44.0).max(112.0);
+    let mut out = FooterOut::default();
+    let mut x = row.right();
+    let w = width(primary);
+    x -= w;
+    let rect = Rect::from_min_size(egui::pos2(x, row.top()), vec2(w, H));
+    if theme::gradient_button(ui, rect, ui.scope_id().with(("footer-primary", primary)), primary, None, enabled, &app.tex, p).clicked() && enabled {
+        out.primary = true;
+    }
+    for (i, label) in secondary.iter().enumerate().rev() {
+        let w = width(label);
+        x -= GAP + w;
+        let rect = Rect::from_min_size(egui::pos2(x, row.top()), vec2(w, H));
+        if theme::button_at(ui, rect, ui.scope_id().with(("footer-secondary", i, *label)), label, theme::Btn::Ghost, p).clicked() {
+            out.secondary = Some(i);
+        }
+    }
+    if let Some(label) = left {
+        let rect = Rect::from_min_size(row.min, vec2(width(label), H));
+        if theme::button_at(ui, rect, ui.scope_id().with(("footer-left", label)), label, theme::Btn::Ghost, p).clicked() {
+            out.left = true;
+        }
+    }
+    out
 }
 
 

@@ -69,7 +69,7 @@ strings! {
         no_tasks: "No tasks here", "Здесь пока нет задач", "Тут поки немає завдань";
         no_tasks_hint: "Type a title above and press Enter.", "Введите название выше и нажмите Enter.", "Введіть назву вище й натисніть Enter.";
         add_task_hint: "Add a task and press Enter…", "Новая задача: введите и нажмите Enter…", "Нове завдання: введіть і натисніть Enter…";
-        filter_hint: "Filter tasks…", "Фильтр задач…", "Фільтр завдань…";
+        filter_hint: "Search…", "Поиск…", "Пошук…";
         clear_filters: "Clear filters", "Сбросить фильтры", "Скинути фільтри";
         sort_by: "Sort", "Порядок", "Порядок";
         sort_manual: "Manual", "Вручную", "Вручну";
@@ -94,7 +94,6 @@ strings! {
         prio_high: "High", "Высокий", "Високий";
         prio_urgent: "Urgent", "Срочный", "Терміновий";
         deadline_label: "Deadline", "Дедлайн", "Дедлайн";
-        dl_any: "Any", "Любой", "Будь-який";
         dl_overdue: "Overdue", "Просрочен", "Прострочений";
         dl_today: "Today", "Сегодня", "Сьогодні";
         dl_week: "This week", "На неделе", "Цього тижня";

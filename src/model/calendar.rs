@@ -48,6 +48,8 @@ pub struct Item {
     pub time: Option<NaiveTime>,
     pub done: bool,
     pub overdue: bool,
+    /// A plan date in the past on an open task: shown muted, never red.
+    pub past: bool,
     pub profile: Profile,
 }
 
@@ -56,9 +58,14 @@ pub fn is_done_on(task: &Task, occ: NaiveDate) -> bool {
     task.is_closed() || (task.recurrence.is_some() && task.done_dates.contains(&occ))
 }
 
-/// An open, non-recurring task with a deadline in the past.
-pub fn is_overdue(task: &Task, today: NaiveDate) -> bool {
-    task.recurrence.is_none() && !task.is_closed() && task.deadline.is_some_and(|d| d < today)
+/// Has a deadline passed? A date-only deadline is over once the day is over; with a time, once that moment is past.
+pub fn deadline_passed(date: NaiveDate, time: Option<NaiveTime>, now: NaiveDateTime) -> bool {
+    date < now.date() || (date == now.date() && time.is_some_and(|t| t < now.time()))
+}
+
+/// An open, non-recurring task whose **deadline** has passed. A plan date in the past never makes a task overdue.
+pub fn is_overdue(task: &Task, now: NaiveDateTime) -> bool {
+    task.recurrence.is_none() && !task.is_closed() && task.deadline.is_some_and(|d| deadline_passed(d, task.deadline_time, now))
 }
 
 /// Items of all tasks that fall within `from..=to`.
@@ -68,7 +75,7 @@ pub fn items_in_range(
     to: NaiveDate,
     filter: ProfileFilter,
     hide_done: bool,
-    today: NaiveDate,
+    now: NaiveDateTime,
 ) -> BTreeMap<NaiveDate, Vec<Item>> {
     let mut map: BTreeMap<NaiveDate, Vec<Item>> = BTreeMap::new();
     for t in tasks.iter().filter(|t| filter.allows(t.profile)) {
@@ -77,8 +84,9 @@ pub fn items_in_range(
             if hide_done && done {
                 return;
             }
-            let time = if kind == ItemKind::Scheduled { t.time } else { None };
-            let overdue = t.recurrence.is_none() && !done && date < today;
+            let time = if kind == ItemKind::Scheduled { t.time } else { t.deadline_time };
+            let overdue = kind == ItemKind::Deadline && t.recurrence.is_none() && !done && deadline_passed(date, time, now);
+            let past = kind == ItemKind::Scheduled && t.recurrence.is_none() && !done && date < now.date();
             map.entry(date).or_default().push(Item {
                 task_id: t.id.clone(),
                 kind,
@@ -87,6 +95,7 @@ pub fn items_in_range(
                 time,
                 done,
                 overdue,
+                past,
                 profile: t.profile,
             });
         };
@@ -115,30 +124,26 @@ pub fn items_in_range(
         }
     }
     for items in map.values_mut() {
-        items.sort_by_key(|i| (i.kind == ItemKind::Deadline, i.time.is_none(), i.time));
+        items.sort_by_key(|i| (i.time.is_none(), i.time, i.kind == ItemKind::Deadline));
     }
     map
 }
 
-/// Open non-recurring items from before `today` (overdue deadlines and missed scheduled days).
-pub fn overdue_items(tasks: &[Task], today: NaiveDate, filter: ProfileFilter) -> Vec<Item> {
+/// Open non-recurring tasks whose deadline has passed. Plan dates are not considered.
+pub fn overdue_items(tasks: &[Task], now: NaiveDateTime, filter: ProfileFilter) -> Vec<Item> {
     let mut out = Vec::new();
     for t in tasks.iter().filter(|t| filter.allows(t.profile) && t.recurrence.is_none() && !t.is_closed()) {
-        // A task with a deadline is overdue by the deadline; without one, by its planned day.
-        let (kind, date) = match (t.deadline, t.scheduled) {
-            (Some(d), _) => (ItemKind::Deadline, d),
-            (None, Some(s)) => (ItemKind::Scheduled, s),
-            _ => continue,
-        };
-        if date < today {
+        let Some(d) = t.deadline else { continue };
+        if deadline_passed(d, t.deadline_time, now) {
             out.push(Item {
                 task_id: t.id.clone(),
-                kind,
-                date,
-                occ: date,
-                time: t.time.filter(|_| kind == ItemKind::Scheduled),
+                kind: ItemKind::Deadline,
+                date: d,
+                occ: d,
+                time: t.deadline_time,
                 done: false,
                 overdue: true,
+                past: false,
                 profile: t.profile,
             });
         }
@@ -223,6 +228,9 @@ mod tests {
     fn now() -> NaiveDateTime {
         d(2026, 11, 17).and_hms_opt(9, 0, 0).unwrap()
     }
+    fn at(day: u32) -> NaiveDateTime {
+        d(2026, 11, day).and_hms_opt(9, 0, 0).unwrap()
+    }
     fn task(profile: Profile, title: &str) -> Task {
         Task::new(profile, title, now())
     }
@@ -269,11 +277,11 @@ mod tests {
         a.scheduled = Some(d(2026, 11, 20));
         a.time = NaiveTime::from_hms_opt(14, 0, 0);
         a.deadline = Some(d(2026, 11, 25));
-        let m = items_in_range(&[a.clone()], d(2026, 11, 1), d(2026, 11, 30), ProfileFilter::All, false, d(2026, 11, 17));
+        let m = items_in_range(&[a.clone()], d(2026, 11, 1), d(2026, 11, 30), ProfileFilter::All, false, at(17));
         assert_eq!(m[&d(2026, 11, 20)][0].kind, ItemKind::Scheduled);
         assert_eq!(m[&d(2026, 11, 25)][0].kind, ItemKind::Deadline);
         assert_eq!(m.len(), 2);
-        let m = items_in_range(&[a], d(2026, 12, 1), d(2026, 12, 31), ProfileFilter::All, false, d(2026, 11, 17));
+        let m = items_in_range(&[a], d(2026, 12, 1), d(2026, 12, 31), ProfileFilter::All, false, at(17));
         assert!(m.is_empty());
     }
 
@@ -285,7 +293,7 @@ mod tests {
         b.scheduled = Some(d(2026, 11, 20));
         b.status = Some(Status::Done);
         let all = [a, b];
-        let q = |f, hide| items_in_range(&all, d(2026, 11, 1), d(2026, 11, 30), f, hide, d(2026, 11, 17));
+        let q = |f, hide| items_in_range(&all, d(2026, 11, 1), d(2026, 11, 30), f, hide, at(17));
         assert_eq!(q(ProfileFilter::All, false)[&d(2026, 11, 20)].len(), 2);
         assert_eq!(q(ProfileFilter::Personal, false)[&d(2026, 11, 20)].len(), 1);
         assert_eq!(q(ProfileFilter::Work, false)[&d(2026, 11, 20)].len(), 1);
@@ -302,7 +310,7 @@ mod tests {
         let mut c = task(Profile::Work, "timed");
         c.scheduled = Some(d(2026, 11, 20));
         c.time = NaiveTime::from_hms_opt(8, 0, 0);
-        let m = items_in_range(&[a.clone(), b.clone(), c.clone()], d(2026, 11, 20), d(2026, 11, 20), ProfileFilter::All, false, d(2026, 11, 1));
+        let m = items_in_range(&[a.clone(), b.clone(), c.clone()], d(2026, 11, 20), d(2026, 11, 20), ProfileFilter::All, false, at(1));
         let ids: Vec<_> = m[&d(2026, 11, 20)].iter().map(|i| i.task_id.clone()).collect();
         assert_eq!(ids, vec![c.id, b.id, a.id]);
     }
@@ -313,7 +321,7 @@ mod tests {
         t.scheduled = Some(d(2026, 11, 2));
         t.recurrence = Some(Recurrence { kind: RecKind::Weekly, interval: 1, until: None });
         t.done_dates.push(d(2026, 11, 9));
-        let m = items_in_range(&[t.clone()], d(2026, 11, 1), d(2026, 11, 30), ProfileFilter::All, false, d(2026, 11, 17));
+        let m = items_in_range(&[t.clone()], d(2026, 11, 1), d(2026, 11, 30), ProfileFilter::All, false, at(17));
         assert_eq!(m.len(), 5);
         assert!(m[&d(2026, 11, 9)][0].done);
         assert!(!m[&d(2026, 11, 16)][0].done);
@@ -333,32 +341,61 @@ mod tests {
         t.scheduled = Some(d(2026, 11, 2));
         t.deadline = Some(d(2026, 11, 4));
         t.recurrence = Some(Recurrence { kind: RecKind::Weekly, interval: 1, until: None });
-        let m = items_in_range(&[t], d(2026, 11, 8), d(2026, 11, 14), ProfileFilter::All, false, d(2026, 11, 1));
+        let m = items_in_range(&[t], d(2026, 11, 8), d(2026, 11, 14), ProfileFilter::All, false, at(1));
         assert_eq!(m[&d(2026, 11, 9)][0].kind, ItemKind::Scheduled);
         assert_eq!(m[&d(2026, 11, 11)][0].kind, ItemKind::Deadline);
     }
 
     #[test]
-    fn overdue_and_today_logic() {
-        let today = d(2026, 11, 17);
+    fn overdue_means_a_past_deadline_only() {
+        let now = at(17);
+        // A past deadline (date only) is overdue; today's is not.
         let mut a = task(Profile::Personal, "late");
         a.deadline = Some(d(2026, 11, 16));
-        assert!(is_overdue(&a, today));
-        a.deadline = Some(today);
-        assert!(!is_overdue(&a, today)); // due today is not overdue
+        assert!(is_overdue(&a, now));
+        a.deadline = Some(d(2026, 11, 17));
+        assert!(!is_overdue(&a, now));
+        // With a time: overdue once the time has passed today.
+        a.deadline_time = NaiveTime::from_hms_opt(8, 0, 0);
+        assert!(is_overdue(&a, now)); // 08:00 < 09:00
+        a.deadline_time = NaiveTime::from_hms_opt(18, 0, 0);
+        assert!(!is_overdue(&a, now));
+        // Closed tasks are never overdue.
         a.deadline = Some(d(2026, 11, 16));
         a.status = Some(Status::Done);
-        assert!(!is_overdue(&a, today));
+        assert!(!is_overdue(&a, now));
 
+        // A past plan date is not overdue, in the pure check, in the lists of items and in overdue_items.
         let mut b = task(Profile::Work, "planned yesterday");
         b.scheduled = Some(d(2026, 11, 16));
+        assert!(!is_overdue(&b, now));
+        let m = items_in_range(&[b.clone()], d(2026, 11, 1), d(2026, 11, 30), ProfileFilter::All, false, now);
+        let item = &m[&d(2026, 11, 16)][0];
+        assert!(!item.overdue && item.past);
         let mut c = task(Profile::Work, "future");
         c.deadline = Some(d(2026, 11, 20));
-        let list = [a, b.clone(), c];
-        let od = overdue_items(&list, today, ProfileFilter::All);
+        let mut late = task(Profile::Personal, "late again");
+        late.deadline = Some(d(2026, 11, 10));
+        let list = [late.clone(), b, c];
+        let od = overdue_items(&list, now, ProfileFilter::All);
         assert_eq!(od.len(), 1);
-        assert_eq!(od[0].task_id, b.id);
-        assert!(overdue_items(&list, today, ProfileFilter::Personal).is_empty());
+        assert_eq!(od[0].task_id, late.id);
+        assert!(overdue_items(&list, now, ProfileFilter::Work).is_empty());
+    }
+
+    #[test]
+    fn deadline_time_is_shown_and_decides_overdue() {
+        let mut t = task(Profile::Work, "call at five");
+        t.deadline = Some(d(2026, 11, 17));
+        t.deadline_time = NaiveTime::from_hms_opt(8, 30, 0);
+        let m = items_in_range(&[t.clone()], d(2026, 11, 17), d(2026, 11, 17), ProfileFilter::All, false, at(17));
+        let item = &m[&d(2026, 11, 17)][0];
+        assert_eq!(item.kind, ItemKind::Deadline);
+        assert_eq!(item.time, NaiveTime::from_hms_opt(8, 30, 0));
+        assert!(item.overdue); // 08:30 is before the 09:00 "now"
+        t.deadline_time = NaiveTime::from_hms_opt(23, 0, 0);
+        let m = items_in_range(&[t], d(2026, 11, 17), d(2026, 11, 17), ProfileFilter::All, false, at(17));
+        assert!(!m[&d(2026, 11, 17)][0].overdue);
     }
 
     #[test]

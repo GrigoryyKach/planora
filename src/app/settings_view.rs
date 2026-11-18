@@ -51,7 +51,7 @@ fn combo_row<T: PartialEq + Copy>(ui: &mut Ui, p: &Pal, title: &str, id: &str, c
         ui.label(RichText::new(title).font(theme::reg(14.0)).color(p.text));
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             let label = options.iter().find(|o| o.0 == current).map(|o| o.1).unwrap_or("");
-            egui::ComboBox::from_id_salt(id).width(width).selected_text(RichText::new(label).font(theme::reg(13.5))).show_ui(ui, |ui| {
+            widgets::combo(id, label, width).show_ui(ui, |ui| {
                 for (v, name) in options {
                     if ui.selectable_label(*v == current, RichText::new(*name).font(theme::reg(13.5))).clicked() {
                         picked = Some(*v);
@@ -81,8 +81,19 @@ impl App {
 
             // ── Interface
             group(ui, p, t.group_interface, |ui| {
+                // Language and theme use the same labels and values as the shared i18n rows, drawn with the
+                // app's dropdown so the arrow is centred like everywhere else.
                 let mut lang = self.lang;
-                if i18n::language_row(ui, &mut lang, p) {
+                if let Some(l) = combo_row(
+                    ui,
+                    p,
+                    i18n::language_label(self.lang),
+                    "language",
+                    lang,
+                    &i18n::Lang::ALL.iter().map(|l| (*l, l.native_name())).collect::<Vec<_>>(),
+                    150.0,
+                ) {
+                    lang = l;
                     self.lang = lang;
                     self.cfg.language = Some(lang.code().to_string());
                     if let Some(tr) = &self.tray {
@@ -92,10 +103,10 @@ impl App {
                     self.touch_cfg(&ctx);
                 }
                 ui.add_space(6.0);
-                let mut mode = self.cfg.theme;
-                if i18n::theme_row(ui, &mut mode, self.lang, p) {
-                    self.cfg.theme = mode;
-                    theme::apply(&ctx, mode);
+                let theme_opts: Vec<(theme::ThemeMode, &str)> = theme::ThemeMode::ALL.iter().map(|m| (*m, i18n::theme_name(*m, self.lang))).collect();
+                if let Some(m) = combo_row(ui, p, i18n::theme_label(self.lang), "theme", self.cfg.theme, &theme_opts, 150.0) {
+                    self.cfg.theme = m;
+                    theme::apply(&ctx, m);
                     self.touch_cfg(&ctx);
                 }
                 ui.add_space(6.0);
@@ -175,13 +186,13 @@ impl App {
                 ui.label(RichText::new(self.dir.display().to_string()).font(theme::reg(12.5)).color(p.muted));
                 ui.add_space(6.0);
                 ui.horizontal_wrapped(|ui| {
-                    if theme::button(ui, t.open_data_folder, Btn::Soft, p).clicked() {
+                    if widgets::btn(ui, t.open_data_folder, Btn::Soft, p).clicked() {
                         open_folder(&self.dir);
                     }
-                    if theme::button(ui, t.export_json, Btn::Soft, p).clicked() {
+                    if widgets::btn(ui, t.export_json, Btn::Soft, p).clicked() {
                         self.export_json(&ctx);
                     }
-                    if theme::button(ui, t.import_json, Btn::Soft, p).clicked() {
+                    if widgets::btn(ui, t.import_json, Btn::Soft, p).clicked() {
                         self.import_json();
                     }
                 });
@@ -198,7 +209,7 @@ impl App {
                     ui.horizontal(|ui| {
                         ui.label(RichText::new(fmt::date_long(self.lang, *day)).font(theme::reg(13.5)).color(p.text));
                         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                            if theme::button(ui, t.restore, Btn::Small, p).clicked() {
+                            if widgets::btn(ui, t.restore, Btn::Small, p).clicked() {
                                 restore = Some(path.clone());
                             }
                         });
@@ -224,11 +235,11 @@ impl App {
                     ui.label(RichText::new(self.updater.status_text(self.lang)).font(theme::reg(13.5)).color(p.muted));
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         if let UpdateState::Available { .. } = self.updater.state() {
-                            if theme::button(ui, u.update_btn, Btn::Soft, p).clicked() && self.updater.apply() {
+                            if widgets::btn(ui, u.update_btn, Btn::Soft, p).clicked() && self.updater.apply() {
                                 self.quit(&ctx);
                             }
                         }
-                        if theme::button(ui, u.check_now, Btn::Ghost, p).clicked() {
+                        if widgets::btn(ui, u.check_now, Btn::Ghost, p).clicked() {
                             let c = ctx.clone();
                             self.updater.check(move || c.request_repaint());
                         }
@@ -252,7 +263,7 @@ impl App {
                     });
                 });
                 ui.add_space(6.0);
-                if theme::button(ui, crate::REPO_URL, Btn::Link, p).clicked() {
+                if widgets::btn(ui, crate::REPO_URL, Btn::Link, p).clicked() {
                     ctx.open_url(egui::OpenUrl::new_tab(crate::REPO_URL));
                 }
             });

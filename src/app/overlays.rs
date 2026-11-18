@@ -1,7 +1,7 @@
 //! Overlays: replace-data confirmation, missed reminders, corrupted data notice, day panel,
 //! date picker popup and the toast.
 
-use super::dialogs::{modal, open_folder, primary, Dialog};
+use super::dialogs::{footer, modal, open_folder, Dialog};
 use super::widgets::{self, Icon};
 use super::{App, DateTarget};
 use crate::config::Nav;
@@ -41,14 +41,9 @@ impl App {
             ui.add_space(4.0);
             theme::hint(ui, t.replace_hint, p);
             ui.add_space(14.0);
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if primary(ui, self, t.replace, 130.0, true, p) {
-                    confirm = true;
-                }
-                if theme::button(ui, t.cancel, Btn::Ghost, p).clicked() {
-                    close = true;
-                }
-            });
+            let f = footer(ui, self, p, None, &[t.cancel], t.replace, true);
+            confirm |= f.primary;
+            close |= f.secondary.is_some();
         });
         if confirm {
             self.replace_data(ctx, data);
@@ -125,11 +120,7 @@ impl App {
                 }
             });
             ui.add_space(12.0);
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if primary(ui, self, t.dismiss, 130.0, true, p) {
-                    close = true;
-                }
-            });
+            close |= footer(ui, self, p, None, &[], t.dismiss, true).primary;
         });
         if let Some(id) = open {
             self.open_editor(&id);
@@ -150,14 +141,11 @@ impl App {
             ui.add_space(6.0);
             ui.add(egui::Label::new(RichText::new(t.corrupt_text.replace("{file}", &name)).font(theme::reg(14.0)).color(p.text)).wrap());
             ui.add_space(14.0);
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if primary(ui, self, t.ok, 100.0, true, p) {
-                    close = true;
-                }
-                if theme::button(ui, t.open_data_folder, Btn::Ghost, p).clicked() {
-                    open_folder(&self.dir);
-                }
-            });
+            let f = footer(ui, self, p, None, &[t.open_data_folder], t.ok, true);
+            close |= f.primary;
+            if f.secondary.is_some() {
+                open_folder(&self.dir);
+            }
         });
         if close || backdrop {
             return None;
@@ -170,7 +158,7 @@ impl App {
     pub(super) fn day_panel_ui(&mut self, ctx: &egui::Context, p: &Pal) {
         let Some(day) = self.day_panel else { return };
         let t = self.s();
-        let items = items_in_range(&self.data.tasks, day, day, self.cfg.filter, self.cfg.hide_done, self.today).remove(&day).unwrap_or_default();
+        let items = items_in_range(&self.data.tasks, day, day, self.cfg.filter, self.cfg.hide_done, self.now).remove(&day).unwrap_or_default();
         let mut close = false;
         let mut add = false;
         let mut export = false;
@@ -199,14 +187,9 @@ impl App {
                 }
             });
             ui.add_space(10.0);
-            ui.horizontal(|ui| {
-                if primary(ui, self, t.add_on_day, 220.0, true, p) {
-                    add = true;
-                }
-                if theme::button(ui, t.export_pdf, Btn::Ghost, p).clicked() {
-                    export = true;
-                }
-            });
+            let f = footer(ui, self, p, None, &[t.export_pdf], t.add_on_day, true);
+            add |= f.primary;
+            export |= f.secondary.is_some();
         });
         if export {
             self.export_pdf(ctx, super::export::ExportTarget::Day(day));
@@ -314,10 +297,10 @@ impl App {
                     }
                     ui.add_space(4.0);
                     ui.horizontal(|ui| {
-                        if theme::button(ui, t.today_btn, Btn::Soft, p).clicked() {
+                        if widgets::btn(ui, t.today_btn, Btn::Soft, p).clicked() {
                             chosen = Some(Some(self.today));
                         }
-                        if theme::button(ui, t.clear, Btn::Ghost, p).clicked() {
+                        if widgets::btn(ui, t.clear, Btn::Ghost, p).clicked() {
                             chosen = Some(None);
                         }
                     });
@@ -354,7 +337,7 @@ impl App {
                         ui.label(RichText::new(&text).font(theme::reg(14.0)).color(Color32::WHITE));
                         if has_undo {
                             ui.add_space(8.0);
-                            if theme::button(ui, t.undo, Btn::Link, &dark).clicked() {
+                            if widgets::btn(ui, t.undo, Btn::Link, &dark).clicked() {
                                 undo = true;
                             }
                         }

@@ -10,7 +10,7 @@ use crate::model::{Priority, Profile, Status, Task};
 use crate::theme::{self, Btn, Pal};
 use chrono::{Datelike, Duration, NaiveDate, Weekday};
 use eframe::egui::{
-    self, Align, Align2, Color32, CursorIcon, Layout, Pos2, Rect, RichText, ScrollArea, Sense, Stroke, StrokeKind, Ui, pos2, vec2,
+    self, Align, Align2, CursorIcon, Layout, Pos2, Rect, RichText, ScrollArea, Sense, Stroke, StrokeKind, Ui, pos2, vec2,
 };
 
 #[derive(Clone)]
@@ -92,13 +92,14 @@ impl App {
             }
         }
         let today = self.today;
-        match f.deadline {
-            1 => is_overdue(t, today),
-            2 => t.deadline == Some(today),
-            3 => t.deadline.is_some_and(|d| d >= today && d <= end_of_week(today, self.week_start())),
-            4 => t.deadline.is_none(),
-            _ => true,
+        if f.deadline.iter().any(|b| *b) {
+            let ok = (f.deadline[0] && is_overdue(t, self.now))
+                || (f.deadline[1] && t.deadline == Some(today))
+                || (f.deadline[2] && t.deadline.is_some_and(|d| d >= today && d <= end_of_week(today, self.week_start())))
+                || (f.deadline[3] && t.deadline.is_none());
+            return ok;
         }
+        true
     }
 
     pub(super) fn open_picker(&mut self, target: DateTarget, anchor: Pos2, current: Option<NaiveDate>) {
@@ -284,7 +285,7 @@ impl App {
             let w = ui.available_width() - 100.0;
             let resp = widgets::input(ui, &mut text, t.add_task_hint, w);
             let enter = resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-            let click = theme::button(ui, t.add, Btn::Soft, p).clicked();
+            let click = widgets::btn(ui, t.add, Btn::Soft, p).clicked();
             if (enter || click) && !text.trim().is_empty() {
                 added = true;
                 if enter {
@@ -307,11 +308,16 @@ impl App {
             widgets::input(ui, &mut q, t.filter_hint, 220.0);
             self.filter.text = q;
             ui.add_space(6.0);
+            let all = t.all;
+            widgets::multi_select(ui, "f-status", t.status_label, all, t.clear, &[t.status_none, t.status_todo, t.status_progress, t.status_done, t.status_cancelled], &mut self.filter.status, p);
+            widgets::multi_select(ui, "f-priority", t.priority_label, all, t.clear, &[t.priority_none, t.prio_low, t.prio_medium, t.prio_high, t.prio_urgent], &mut self.filter.priority, p);
+            widgets::multi_select(ui, "f-deadline", t.deadline_label, all, t.clear, &[t.dl_overdue, t.dl_today, t.dl_week, t.dl_none], &mut self.filter.deadline, p);
+            ui.add_space(6.0);
             let mut s = self.cfg.sort;
             ui.label(RichText::new(t.sort_by).font(theme::reg(13.0)).color(p.muted));
             let names = [(SortMode::Manual, t.sort_manual), (SortMode::Deadline, t.sort_deadline), (SortMode::Priority, t.sort_priority), (SortMode::Created, t.sort_created)];
             let cur = names.iter().find(|n| n.0 == s).map(|n| n.1).unwrap_or("");
-            egui::ComboBox::from_id_salt("sort").selected_text(RichText::new(cur).font(theme::reg(13.5))).width(130.0).show_ui(ui, |ui| {
+            widgets::combo("sort", cur, 130.0).show_ui(ui, |ui| {
                 for (m, n) in names {
                     if ui.selectable_label(s == m, RichText::new(n).font(theme::reg(13.5))).clicked() {
                         s = m;
@@ -324,25 +330,12 @@ impl App {
             }
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 self.hide_done_toggle(ui, p, false);
-                if self.filter.status.iter().any(|b| *b) || self.filter.priority.iter().any(|b| *b) || self.filter.deadline != 0 || !self.filter.text.is_empty() {
-                    if theme::button(ui, t.clear_filters, Btn::Link, p).clicked() {
+                if self.filter.status.iter().any(|b| *b) || self.filter.priority.iter().any(|b| *b) || self.filter.deadline.iter().any(|b| *b) || !self.filter.text.is_empty() {
+                    if widgets::btn(ui, t.clear_filters, Btn::Link, p).clicked() {
                         self.filter = Default::default();
                     }
                 }
             });
-        });
-        ui.add_space(4.0);
-        ui.horizontal_wrapped(|ui| {
-            ui.spacing_mut().item_spacing = vec2(6.0, 6.0);
-            filter_group(ui, p, t.status_label, &[t.status_none, t.status_todo, t.status_progress, t.status_done, t.status_cancelled], &mut self.filter.status);
-            ui.add_space(10.0);
-            filter_group(ui, p, t.priority_label, &[t.priority_none, t.prio_low, t.prio_medium, t.prio_high, t.prio_urgent], &mut self.filter.priority);
-            ui.add_space(10.0);
-            ui.label(RichText::new(t.deadline_label).font(theme::reg(12.5)).color(p.muted));
-            let labels = [t.dl_any, t.dl_overdue, t.dl_today, t.dl_week, t.dl_none];
-            if let Some(Some(i)) = widgets::pills(ui, "dlf", &labels, &[], Some(self.filter.deadline), false, p) {
-                self.filter.deadline = i;
-            }
         });
     }
 
@@ -419,10 +412,14 @@ impl App {
             }
         }
         if let Some(d) = task.deadline {
-            let od = is_overdue(task, self.today);
+            let od = is_overdue(task, self.now);
             let col = if od { widgets::RED } else if muted { p.muted } else { p.text };
             widgets::icon(ui.painter(), Icon::Flag, pos2(right - cols.deadline_x + 5.0, cy), 12.0, if od { widgets::RED } else { p.muted });
-            ui.painter().text(pos2(right - cols.deadline_x + 16.0, cy), Align2::LEFT_CENTER, super::today_view::date_label(self, d), font.clone(), col);
+            let mut dl = super::today_view::date_label(self, d);
+            if let Some(tm) = task.deadline_time {
+                dl = format!("{dl} {}", fmt::time_text(tm, self.h24()));
+            }
+            ui.painter().text(pos2(right - cols.deadline_x + 16.0, cy), Align2::LEFT_CENTER, dl, font.clone(), col);
         }
         if let Some(d) = task.scheduled {
             let mut s = super::today_view::date_label(self, d);
@@ -574,19 +571,4 @@ fn columns(width: f32) -> Cols {
     let deadline_x = prio_x + 96.0;
     let sched_x = deadline_x + 142.0;
     Cols { prio_x, deadline_x, sched_x, show_prio_text }
-}
-
-fn filter_group(ui: &mut Ui, p: &Pal, title: &str, labels: &[&str], flags: &mut [bool; 5]) {
-    ui.label(RichText::new(title).font(theme::reg(12.5)).color(p.muted));
-    for (i, l) in labels.iter().enumerate() {
-        let on = flags[i];
-        let g = ui.painter().layout_no_wrap(l.to_string(), theme::semi(12.0), p.text);
-        let (r, resp) = ui.allocate_exact_size(vec2(g.size().x + 20.0, 26.0), Sense::click());
-        let fill = if on { p.accent_soft } else if resp.hovered() { p.hover } else { Color32::TRANSPARENT };
-        ui.painter().rect(r, 13.0, fill, Stroke::new(1.0, if on { p.accent } else { p.line }), StrokeKind::Inside);
-        ui.painter().text(r.center(), Align2::CENTER_CENTER, l, theme::semi(12.0), if on { p.accent } else { p.muted });
-        if resp.on_hover_cursor(CursorIcon::PointingHand).clicked() {
-            flags[i] = !on;
-        }
-    }
 }

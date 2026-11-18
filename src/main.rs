@@ -4,6 +4,7 @@ mod app;
 mod bus;
 mod config;
 mod fmt;
+#[allow(dead_code)]
 mod i18n;
 mod model;
 #[allow(dead_code)]

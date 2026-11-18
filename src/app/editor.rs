@@ -7,13 +7,54 @@ use crate::fmt;
 use crate::model::{CheckItem, Link, Priority, Profile, RecKind, Recurrence, Remind, Status};
 use crate::theme::{self, Btn, Pal};
 use chrono::NaiveTime;
-use eframe::egui::{self, Align, Align2, Color32, CursorIcon, Layout, RichText, ScrollArea, Sense, Stroke, StrokeKind, Ui, pos2, vec2};
+use eframe::egui::{self, Align, Color32, CursorIcon, Layout, RichText, ScrollArea, Sense, Stroke, StrokeKind, Ui, vec2};
+
+/// A time-of-day text field that keeps what the user types until it parses.
+#[derive(Default)]
+struct TimeField {
+    buf: String,
+    synced: Option<NaiveTime>,
+    init: bool,
+}
+
+impl TimeField {
+    /// Re-reads the value when it changed from outside (picker, clear button).
+    fn sync(&mut self, value: Option<NaiveTime>, h24: bool) {
+        if !self.init || self.synced != value {
+            self.buf = value.map(|x| fmt::time_text(x, h24)).unwrap_or_default();
+            self.synced = value;
+            self.init = true;
+        }
+    }
+
+    fn show(&mut self, ui: &mut Ui, value: &mut Option<NaiveTime>, h24: bool) {
+        let bad = !self.buf.trim().is_empty() && fmt::parse_time(&self.buf).is_none();
+        let hint = if h24 { "HH:MM" } else { "h:MM AM" };
+        let resp = ui.add(
+            egui::TextEdit::singleline(&mut self.buf).hint_text(hint).desired_width(80.0).margin(egui::Margin::symmetric(9, 6)).font(theme::reg(13.5)),
+        );
+        if bad {
+            ui.painter().rect_stroke(resp.rect, 5.0, Stroke::new(1.5, widgets::RED), StrokeKind::Outside);
+        }
+        if resp.changed() {
+            if self.buf.trim().is_empty() {
+                *value = None;
+                self.synced = None;
+            } else if let Some(tm) = fmt::parse_time(&self.buf) {
+                *value = Some(tm);
+                self.synced = Some(tm);
+            }
+        }
+        if resp.lost_focus() {
+            self.buf = value.map(|x| fmt::time_text(x, h24)).unwrap_or_default();
+        }
+    }
+}
 
 pub struct Editor {
     pub id: String,
-    time_buf: String,
-    time_synced: Option<NaiveTime>,
-    time_init: bool,
+    plan: TimeField,
+    dl: TimeField,
     new_link: String,
     new_check: String,
     focus_title: bool,
@@ -21,8 +62,30 @@ pub struct Editor {
 
 impl Editor {
     pub fn new(id: String) -> Self {
-        Editor { id, time_buf: String::new(), time_synced: None, time_init: false, new_link: String::new(), new_check: String::new(), focus_title: true }
+        Editor { id, plan: TimeField::default(), dl: TimeField::default(), new_link: String::new(), new_check: String::new(), focus_title: true }
     }
+}
+
+/// Commits the typed text as a new link. Returns `false` (and changes nothing) for empty input.
+pub fn commit_link(list: &mut Vec<Link>, input: &mut String) -> bool {
+    let url = input.trim().to_string();
+    if url.is_empty() {
+        return false;
+    }
+    list.push(Link { url, title: String::new() });
+    input.clear();
+    true
+}
+
+/// Commits the typed text as a new checklist item. Returns `false` (and changes nothing) for empty input.
+pub fn commit_check(list: &mut Vec<CheckItem>, input: &mut String) -> bool {
+    let text = input.trim().to_string();
+    if text.is_empty() {
+        return false;
+    }
+    list.push(CheckItem { text, done: false });
+    input.clear();
+    true
 }
 
 /// Adds `https://` when the user typed a bare address.
@@ -59,11 +122,9 @@ impl App {
         let mut close = false;
         let mut delete = false;
 
-        if !ed.time_init || ed.time_synced != task.time {
-            ed.time_buf = task.time.map(|x| fmt::time_text(x, self.h24())).unwrap_or_default();
-            ed.time_synced = task.time;
-            ed.time_init = true;
-        }
+        let h24 = self.h24();
+        ed.plan.sync(task.time, h24);
+        ed.dl.sync(task.deadline_time, h24);
 
         ui.horizontal(|ui| {
             theme::caps(ui, t.task, p);
@@ -108,7 +169,7 @@ impl App {
                     }
                 }
                 let current = task.project_id.as_deref().and_then(|id| self.project_name(id)).unwrap_or(t.inbox).to_string();
-                egui::ComboBox::from_id_salt("ed-project").selected_text(RichText::new(current).font(theme::reg(13.5))).width(ui.available_width() - 4.0).show_ui(ui, |ui| {
+                widgets::combo("ed-project", &current, ui.available_width() - 4.0).show_ui(ui, |ui| {
                     if ui.selectable_label(task.project_id.is_none(), t.inbox).clicked() {
                         task.project_id = None;
                     }
@@ -143,36 +204,12 @@ impl App {
             ui.add_space(12.0);
             theme::caps(ui, t.when, p);
             ui.add_space(2.0);
-            let h24 = self.h24();
-            self.date_row(ui, p, t.scheduled_label, &mut task.scheduled, DateTarget::Scheduled(task.id.clone()), |ui, task_time_enabled| {
-                if task_time_enabled {
-                    let bad = !ed.time_buf.trim().is_empty() && fmt::parse_time(&ed.time_buf).is_none();
-                    let hint = if h24 { "HH:MM" } else { "h:MM AM" };
-                    let resp = ui.add(
-                        egui::TextEdit::singleline(&mut ed.time_buf)
-                            .hint_text(hint)
-                            .desired_width(80.0)
-                            .margin(egui::Margin::symmetric(9, 6))
-                            .font(theme::reg(13.5)),
-                    );
-                    if bad {
-                        ui.painter().rect_stroke(resp.rect, 5.0, Stroke::new(1.5, widgets::RED), StrokeKind::Outside);
-                    }
-                    if resp.changed() {
-                        if ed.time_buf.trim().is_empty() {
-                            task.time = None;
-                            ed.time_synced = None;
-                        } else if let Some(tm) = fmt::parse_time(&ed.time_buf) {
-                            task.time = Some(tm);
-                            ed.time_synced = Some(tm);
-                        }
-                    }
-                    if resp.lost_focus() {
-                        ed.time_buf = task.time.map(|x| fmt::time_text(x, h24)).unwrap_or_default();
-                    }
-                }
+            self.date_row(ui, p, t.scheduled_label, &mut task.scheduled, DateTarget::Scheduled(task.id.clone()), |ui| {
+                ed.plan.show(ui, &mut task.time, h24);
             });
-            self.date_row(ui, p, t.deadline_label, &mut task.deadline, DateTarget::Deadline(task.id.clone()), |_, _| {});
+            self.date_row(ui, p, t.deadline_label, &mut task.deadline, DateTarget::Deadline(task.id.clone()), |ui| {
+                ed.dl.show(ui, &mut task.deadline_time, h24);
+            });
 
             // Recurrence.
             if task.anchor().is_some() {
@@ -202,14 +239,14 @@ impl App {
                             ui.label(RichText::new(t.days_word).font(theme::reg(13.5)).color(p.text));
                         });
                     }
-                    self.date_row(ui, p, t.until, &mut rec.until, DateTarget::Until(task.id.clone()), |_, _| {});
+                    self.date_row(ui, p, t.until, &mut rec.until, DateTarget::Until(task.id.clone()), |_| {});
                     task.recurrence = Some(rec);
                     theme::hint(ui, t.rec_hint, p);
                 }
             }
 
             // Reminder.
-            if task.time.is_some() && task.scheduled.is_some() {
+            if (task.time.is_some() && task.scheduled.is_some()) || (task.deadline_time.is_some() && task.deadline.is_some()) {
                 ui.add_space(10.0);
                 theme::caps(ui, t.reminder, p);
                 ui.add_space(2.0);
@@ -271,10 +308,10 @@ impl App {
                         r.on_hover_text(t.bad_url);
                     }
                     if !bad && !l.url.trim().is_empty() {
-                        if theme::button(ui, t.open, Btn::Small, p).clicked() {
+                        if widgets::btn(ui, t.open, Btn::Small, p).clicked() {
                             ctx.open_url(egui::OpenUrl::new_tab(normalize_url(&l.url)));
                         }
-                        if theme::button(ui, t.copy, Btn::Small, p).clicked() {
+                        if widgets::btn(ui, t.copy, Btn::Small, p).clicked() {
                             ctx.copy_text(normalize_url(&l.url));
                         }
                     }
@@ -288,13 +325,9 @@ impl App {
             if let Some(i) = remove_link {
                 task.links.remove(i);
             }
-            ui.horizontal(|ui| {
-                let r = widgets::input(ui, &mut ed.new_link, t.add_link_hint, w - 70.0);
-                let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-                if (theme::button(ui, t.add, Btn::Soft, p).clicked() || enter) && !ed.new_link.trim().is_empty() {
-                    task.links.push(Link { url: std::mem::take(&mut ed.new_link).trim().to_string(), title: String::new() });
-                }
-            });
+            if add_row(ui, p, w, t.add_link_hint, t.add, &mut ed.new_link, "ed-new-link") {
+                commit_link(&mut task.links, &mut ed.new_link);
+            }
 
             // Checklist.
             ui.add_space(12.0);
@@ -336,16 +369,9 @@ impl App {
             if let Some(i) = remove_item {
                 task.checklist.remove(i);
             }
-            ui.horizontal(|ui| {
-                let r = widgets::input(ui, &mut ed.new_check, t.add_item_hint, w - 70.0);
-                let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-                if (theme::button(ui, t.add, Btn::Soft, p).clicked() || enter) && !ed.new_check.trim().is_empty() {
-                    task.checklist.push(CheckItem { text: std::mem::take(&mut ed.new_check).trim().to_string(), done: false });
-                    if enter {
-                        r.request_focus();
-                    }
-                }
-            });
+            if add_row(ui, p, w, t.add_item_hint, t.add, &mut ed.new_check, "ed-new-check") {
+                commit_check(&mut task.checklist, &mut ed.new_check);
+            }
 
             ui.add_space(16.0);
             theme::hint(
@@ -377,40 +403,92 @@ impl App {
         }
     }
 
-    /// A labelled row: label, date button (opens the picker), clear button, and optional extras (time field).
-    #[allow(clippy::too_many_arguments)]
-    fn date_row(
-        &mut self,
-        ui: &mut Ui,
-        p: &Pal,
-        label: &str,
-        value: &mut Option<chrono::NaiveDate>,
-        target: DateTarget,
-        extra: impl FnOnce(&mut Ui, bool),
-    ) {
+    /// A labelled row: label, date button (opens the picker), the extras (time field) when a date is set, and a clear button.
+    fn date_row(&mut self, ui: &mut Ui, p: &Pal, label: &str, value: &mut Option<chrono::NaiveDate>, target: DateTarget, extra: impl FnOnce(&mut Ui)) {
         let t = self.s();
-        ui.horizontal(|ui| {
-            ui.add_sized(vec2(84.0, 28.0), egui::Label::new(RichText::new(label).font(theme::reg(13.5)).color(p.muted)));
-            let text = match value {
-                Some(d) => fmt::date_full(self.lang, *d),
-                None => t.set_date.to_string(),
-            };
-            let resp = theme::button(ui, &text, if value.is_some() { Btn::Soft } else { Btn::Ghost }, p);
-            if resp.clicked() {
-                self.open_picker(target.clone(), below(resp.rect), *value);
-            }
-            let is_sched = matches!(target, DateTarget::Scheduled(_));
-            if value.is_some() {
-                if is_sched {
-                    extra(ui, true);
+        // The salt keeps the two rows' widgets apart even though their labels and buttons look alike.
+        ui.push_id(label, |ui| {
+            ui.horizontal(|ui| {
+                ui.add_sized(vec2(84.0, 28.0), egui::Label::new(RichText::new(label).font(theme::reg(13.5)).color(p.muted)));
+                let text = match value {
+                    Some(d) => fmt::date_full(self.lang, *d),
+                    None => t.set_date.to_string(),
+                };
+                let resp = widgets::btn(ui, &text, if value.is_some() { Btn::Soft } else { Btn::Ghost }, p);
+                if resp.clicked() {
+                    self.open_picker(target.clone(), below(resp.rect), *value);
                 }
-                if widgets::icon_button(ui, Icon::Close, 26.0, p).on_hover_text(t.clear).clicked() {
-                    *value = None;
+                if value.is_some() {
+                    extra(ui);
+                    if widgets::icon_button(ui, Icon::Close, 26.0, p).on_hover_text(t.clear).clicked() {
+                        *value = None;
+                    }
                 }
-            }
+            });
         });
         ui.add_space(2.0);
-        let _ = Align2::CENTER_CENTER;
-        let _ = pos2(0.0, 0.0);
+    }
+}
+
+/// An "input + Add" row that fits the panel width. Returns `true` when the user asked to add: Add was clicked
+/// or Enter was pressed with non-empty text. The input keeps (or regains) focus afterwards.
+fn add_row(ui: &mut Ui, p: &Pal, width: f32, hint: &str, add_label: &str, text: &mut String, id: &str) -> bool {
+    let btn_w = ui.painter().layout_no_wrap(add_label.to_string(), theme::semi(13.5), p.text).size().x + 28.0;
+    let mut add = false;
+    ui.push_id(id, |ui| {
+        ui.horizontal(|ui| {
+            let r = widgets::input(ui, text, hint, (width - btn_w - 12.0).max(60.0));
+            let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+            let click = widgets::btn_enabled(ui, add_label, Btn::Soft, !text.trim().is_empty(), p).clicked();
+            if (enter || click) && !text.trim().is_empty() {
+                add = true;
+                r.request_focus();
+            }
+        });
+    });
+    add
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn adding_a_link_commits_and_clears_the_input() {
+        let mut links = Vec::new();
+        let mut input = "  https://example.com/a  ".to_string();
+        assert!(commit_link(&mut links, &mut input));
+        assert_eq!(links.len(), 1);
+        assert_eq!(links[0].url, "https://example.com/a");
+        assert!(input.is_empty());
+    }
+
+    #[test]
+    fn empty_input_adds_nothing() {
+        let mut links = Vec::new();
+        let mut items = Vec::new();
+        let mut blank = "   ".to_string();
+        assert!(!commit_link(&mut links, &mut blank));
+        assert!(!commit_check(&mut items, &mut blank));
+        assert!(links.is_empty() && items.is_empty());
+    }
+
+    #[test]
+    fn adding_checklist_items_keeps_order() {
+        let mut items = Vec::new();
+        let mut input = "First".to_string();
+        assert!(commit_check(&mut items, &mut input));
+        input = "Second".into();
+        assert!(commit_check(&mut items, &mut input));
+        assert_eq!(items.iter().map(|c| c.text.as_str()).collect::<Vec<_>>(), ["First", "Second"]);
+        assert!(items.iter().all(|c| !c.done));
+    }
+
+    #[test]
+    fn urls_are_validated() {
+        assert!(valid_url("example.com"));
+        assert!(valid_url("https://example.com/path?q=1"));
+        assert!(!valid_url("not a url"));
+        assert!(!valid_url("http://nodot"));
     }
 }

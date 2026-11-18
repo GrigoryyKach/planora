@@ -1,7 +1,7 @@
 //! Small drawing helpers: icons, status and priority marks, segmented controls, cards.
 
 use crate::model::{Priority, Status};
-use crate::theme::{self, Pal};
+use crate::theme::{self, Btn, Pal};
 use eframe::egui::{
     self, epaint::PathStroke, Align2, Color32, CursorIcon, Margin, Painter, Pos2, Rect, Response, Sense, Shape,
     Stroke, StrokeKind, Ui, Vec2, pos2, vec2,
@@ -164,7 +164,8 @@ pub fn icon_button(ui: &mut Ui, ic: Icon, size: f32, p: &Pal) -> Response {
 
 /// Status mark: a ring (todo), a half ring (in progress), a green check (done), a crossed ring (cancelled).
 pub fn status_mark(painter: &Painter, c: Pos2, status: Option<Status>, done: bool, p: &Pal) {
-    let status = if done { Some(Status::Done) } else { status };
+    // Cancelled keeps its own red mark even though the task counts as closed.
+    let status = if done && status != Some(Status::Cancelled) { Some(Status::Done) } else { status };
     match status {
         None | Some(Status::Todo) => {
             painter.circle_stroke(c, 8.0, Stroke::new(1.6, if status.is_some() { p.muted } else { p.track }));
@@ -186,8 +187,8 @@ pub fn status_mark(painter: &Painter, c: Pos2, status: Option<Status>, done: boo
             icon(painter, Icon::Check, c, 14.0, Color32::WHITE);
         }
         Some(Status::Cancelled) => {
-            painter.circle_stroke(c, 8.0, Stroke::new(1.6, p.muted));
-            icon(painter, Icon::Close, c, 11.0, p.muted);
+            painter.circle_stroke(c, 8.0, Stroke::new(1.6, RED));
+            icon(painter, Icon::Close, c, 11.0, RED);
         }
     }
 }
@@ -282,4 +283,99 @@ pub fn logo_image_centered(ui: &mut Ui, tex: &egui::TextureHandle, size: f32) ->
     let rect = Rect::from_center_size(row.center(), vec2(size, size));
     ui.painter().image(tex.id(), rect, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
     resp
+}
+
+// ───────────────────────── buttons with unique ids ─────────────────────────
+
+/// `theme::button` derives its id from the label alone, so two buttons with the same text in one frame
+/// ("Set date" twice, "Add" in the list and in the side panel) share one id: hovering one highlights both
+/// and clicks get lost. This wrapper salts the id with the button's position, so every button is independent.
+pub fn btn(ui: &mut Ui, label: &str, kind: Btn, p: &Pal) -> Response {
+    let pos = ui.cursor().min;
+    ui.push_id(("btn-at", pos.x as i32, pos.y as i32), |ui| theme::button(ui, label, kind, p)).inner
+}
+
+/// Like [`btn`], but can be shown disabled (muted, no hover, no click).
+pub fn btn_enabled(ui: &mut Ui, label: &str, kind: Btn, enabled: bool, p: &Pal) -> Response {
+    if enabled {
+        return btn(ui, label, kind, p);
+    }
+    let font = theme::semi(13.5);
+    let g = ui.painter().layout_no_wrap(label.to_string(), font.clone(), p.muted);
+    let (rect, resp) = ui.allocate_exact_size(g.size() + vec2(28.0, 16.0), Sense::hover());
+    ui.painter().rect(rect, 9.0, Color32::TRANSPARENT, Stroke::new(1.0, p.line), StrokeKind::Inside);
+    ui.painter().text(rect.center(), Align2::CENTER_CENTER, label, font, p.muted.gamma_multiply(0.55));
+    resp
+}
+
+// ───────────────────────── dropdowns ─────────────────────────
+
+/// Paints the dropdown chevron, vertically centred on the text row.
+fn chevron(ui: &Ui, rect: Rect, color: Color32) {
+    let c = rect.center() + vec2(0.0, CHEVRON_NUDGE);
+    let st = Stroke::new(1.6, color);
+    ui.painter().line_segment([c + vec2(-4.5, -2.2), c + vec2(0.0, 2.3)], st);
+    ui.painter().line_segment([c + vec2(0.0, 2.3), c + vec2(4.5, -2.2)], st);
+}
+
+/// Pixels to move the chevron so it looks level with the text (Segoe UI sits a little above the line box centre).
+const CHEVRON_NUDGE: f32 = -0.5;
+
+/// A dropdown button in the suite style: text on the left, a chevron centred on the same row.
+pub fn combo(id: &str, text: &str, width: f32) -> egui::ComboBox<'static> {
+    egui::ComboBox::from_id_salt(id.to_string())
+        .width(width)
+        .selected_text(egui::RichText::new(text.to_string()).font(theme::reg(13.5)))
+        .icon(|ui, rect, visuals, _open| chevron(ui, rect, visuals.fg_stroke.color))
+}
+
+/// A checkbox row for multi-select popups.
+pub fn check_row(ui: &mut Ui, label: &str, checked: bool, p: &Pal) -> Response {
+    let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width().max(190.0), 30.0), Sense::click());
+    if resp.hovered() {
+        ui.painter().rect_filled(rect, 7.0, p.hover);
+    }
+    let b = Rect::from_center_size(pos2(rect.left() + 18.0, rect.center().y), vec2(16.0, 16.0));
+    if checked {
+        ui.painter().rect_filled(b, 5.0, p.accent);
+        icon(ui.painter(), Icon::Check, b.center(), 11.0, Color32::WHITE);
+    } else {
+        ui.painter().rect_stroke(b, 5.0, Stroke::new(1.5, p.muted), StrokeKind::Inside);
+    }
+    ui.painter().text(pos2(rect.left() + 34.0, rect.center().y), Align2::LEFT_CENTER, label, theme::reg(13.5), p.text);
+    resp.on_hover_cursor(CursorIcon::PointingHand)
+}
+
+/// A multi-select dropdown ("Status: All", "Status: 2", "Status: Done") with checkboxes and a Clear entry.
+/// Returns `true` when the selection changed.
+#[allow(clippy::too_many_arguments)]
+pub fn multi_select(ui: &mut Ui, id: &str, title: &str, all: &str, clear: &str, options: &[&str], flags: &mut [bool], p: &Pal) -> bool {
+    let n = flags.iter().filter(|b| **b).count();
+    let value = match n {
+        0 => all.to_string(),
+        1 => flags.iter().position(|b| *b).and_then(|i| options.get(i)).map(|s| s.to_string()).unwrap_or_default(),
+        _ => n.to_string(),
+    };
+    let mut changed = false;
+    combo(id, &format!("{title}: {value}"), 150.0)
+        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+        .show_ui(ui, |ui| {
+            ui.set_min_width(190.0);
+            ui.spacing_mut().item_spacing.y = 2.0;
+            for (i, o) in options.iter().enumerate() {
+                if check_row(ui, o, flags[i], p).clicked() {
+                    flags[i] = !flags[i];
+                    changed = true;
+                }
+            }
+            ui.add_space(4.0);
+            let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width().max(190.0), 28.0), Sense::click());
+            let col = if resp.hovered() { p.accent } else { p.muted };
+            ui.painter().text(pos2(rect.left() + 12.0, rect.center().y), Align2::LEFT_CENTER, clear, theme::semi(12.5), col);
+            if resp.on_hover_cursor(CursorIcon::PointingHand).clicked() && n > 0 {
+                flags.iter_mut().for_each(|f| *f = false);
+                changed = true;
+            }
+        });
+    changed
 }

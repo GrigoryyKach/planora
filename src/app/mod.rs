@@ -35,6 +35,8 @@ pub mod widgets;
 
 pub use dialogs::Dialog;
 
+/// Minimum row height (see `App::new`).
+pub const ROW_H: f32 = 34.0;
 pub const ICON_PNG: &[u8] = include_bytes!("../../assets/icon.png");
 /// Colours offered for projects and profiles.
 pub const PALETTE: [u32; 10] = [0x4f6bff, 0x8a5bff, 0xec4899, 0xef4444, 0xf59e0b, 0xeab308, 0x10b981, 0x06b6d4, 0x64748b, 0x78716c];
@@ -78,8 +80,8 @@ pub struct ListFilter {
     pub status: [bool; 5],
     /// Indexes: 0 none, 1 low .. 4 urgent. Empty = all.
     pub priority: [bool; 5],
-    /// 0 any, 1 overdue, 2 today, 3 this week, 4 none.
-    pub deadline: usize,
+    /// Indexes: 0 overdue, 1 today, 2 this week, 3 no deadline. Empty = all.
+    pub deadline: [bool; 4],
 }
 
 pub struct App {
@@ -109,6 +111,10 @@ pub struct App {
     pub settings_msg: Option<String>,
     pub backups: Vec<(NaiveDate, PathBuf)>,
     pub sidebar_drag: Option<String>,
+    /// Where the task side panel was drawn last frame (for the click-outside rule).
+    editor_rect: Option<Rect>,
+    /// A task was opened during this frame (so the same click must not also close the panel).
+    editor_touched: bool,
     modal_was_open: bool,
     data_dirty: Option<f64>,
     cfg_dirty: Option<f64>,
@@ -121,6 +127,10 @@ pub struct App {
 impl App {
     pub fn new(cc: &eframe::CreationContext<'_>, mut cfg: Config, dir: PathBuf, start_hidden: bool) -> Self {
         theme::install(&cc.egui_ctx, cfg.theme);
+        // One rule for vertical alignment: every row is at least as tall as the tallest control (the segmented
+        // control and icon buttons are 34 px), so labels, buttons, chips and icons that share a row are centred
+        // on the same line instead of hugging the top.
+        cc.egui_ctx.all_styles_mut(|s| s.spacing.interact_size.y = ROW_H);
         let lang = i18n::resolve(cfg.language.as_deref());
         let mut cfg_dirty = None;
         if cfg.language.as_deref() != Some(lang.code()) {
@@ -209,6 +219,8 @@ impl App {
             settings_msg: None,
             backups: storage::list_backups(&dir),
             sidebar_drag: None,
+            editor_rect: None,
+            editor_touched: false,
             modal_was_open: false,
             data_dirty: None,
             cfg_dirty,
@@ -389,6 +401,7 @@ impl App {
     pub fn open_editor(&mut self, id: &str) {
         if self.data.task(id).is_some() {
             self.editor = Some(editor::Editor::new(id.to_string()));
+            self.editor_touched = true;
             self.selected = Some(id.to_string());
             self.day_panel = None;
         }
@@ -437,7 +450,7 @@ impl App {
         self.data
             .tasks
             .iter()
-            .filter(|t| t.profile == profile && t.project_id.as_deref() == project && calendar::is_overdue(t, self.today))
+            .filter(|t| t.profile == profile && t.project_id.as_deref() == project && calendar::is_overdue(t, self.now))
             .count()
     }
 
@@ -541,6 +554,23 @@ impl App {
         }
     }
 
+    /// A click anywhere outside the task side panel closes it, unless the click landed in a popup (date picker,
+    /// dropdown, context menu, dialog) or opened another task. The check runs at the end of the frame, after
+    /// every widget had its chance to open a task.
+    fn close_editor_on_outside_click(&mut self, ctx: &egui::Context) {
+        let touched = std::mem::take(&mut self.editor_touched);
+        let (Some(rect), true) = (self.editor_rect, self.editor.is_some()) else { return };
+        if touched || !ctx.input(|i| i.pointer.primary_clicked()) {
+            return;
+        }
+        let Some(pos) = ctx.input(|i| i.pointer.interact_pos()) else { return };
+        let over_popup = ctx.layer_id_at(pos).is_some_and(|l| l.order != egui::Order::Background);
+        if !rect.contains(pos) && !over_popup {
+            self.editor = None;
+            self.flush();
+        }
+    }
+
     pub fn open_quick_add(&mut self, date: Option<NaiveDate>) {
         let (profile, project) = match &self.cfg.nav {
             Nav::Inbox(p) => (*p, None),
@@ -621,11 +651,14 @@ impl eframe::App for App {
             .show(ui, |ui| self.sidebar(ui, &p));
 
         if self.editor.is_some() {
-            egui::Panel::right("editor")
+            let panel = egui::Panel::right("editor")
                 .exact_size(372.0)
                 .resizable(false)
                 .frame(Frame::new().fill(p.sidebar).inner_margin(Margin { left: 20, right: 14, top: 18, bottom: 12 }))
                 .show(ui, |ui| self.editor_panel(ui, &p));
+            self.editor_rect = Some(panel.response.rect);
+        } else {
+            self.editor_rect = None;
         }
 
         egui::CentralPanel::default().frame(Frame::new().fill(p.bg).inner_margin(Margin { left: 28, right: 28, top: 20, bottom: 16 })).show(ui, |ui| {
@@ -647,6 +680,7 @@ impl eframe::App for App {
         self.picker_ui(&ctx, &p);
         self.toast_ui(&ctx, &p);
         self.drag_ghost(&ctx, &p);
+        self.close_editor_on_outside_click(&ctx);
         // Ensure the whole window clears the drag when the pointer is released outside any cell.
         if self.drag.is_some() && ctx.input(|i| i.pointer.any_released()) {
             self.drag = None;

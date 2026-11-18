@@ -33,6 +33,7 @@ pub fn paint_chip(
     title: &str,
     profile_color: Color32,
     time_text: Option<&str>,
+    cancelled: bool,
     hovered: bool,
     p: &Pal,
 ) {
@@ -43,13 +44,18 @@ pub fn paint_chip(
     painter.rect_filled(Rect::from_min_size(rect.min, vec2(3.0, rect.height())), 2.0, profile_color);
     let mut x = rect.left() + 8.0;
     let cy = rect.center().y;
-    let col = if item.done {
+    // Closed (done or cancelled) and past plan dates are muted; only an overdue deadline is red.
+    let col = if item.done || item.past {
         p.muted
     } else if item.overdue {
         widgets::RED
     } else {
         p.text
     };
+    if cancelled {
+        widgets::icon(painter, Icon::Close, pos2(x + 4.0, cy), 10.0, widgets::RED);
+        x += 13.0;
+    }
     if item.kind == ItemKind::Deadline {
         widgets::icon(painter, Icon::Flag, pos2(x + 4.0, cy), 11.0, if item.overdue && !item.done { widgets::RED } else { p.muted });
         x += 13.0;
@@ -78,7 +84,7 @@ impl App {
             self.open_quick_add(None);
         }
         if let Some(target) = export {
-            if theme::button(ui, t.export_pdf, Btn::Ghost, p).clicked() {
+            if widgets::btn(ui, t.export_pdf, Btn::Ghost, p).clicked() {
                 self.export_pdf(&ctx, target);
             }
         }
@@ -125,7 +131,7 @@ impl App {
             if widgets::icon_button(ui, Icon::Left, 32.0, p).on_hover_text(format!("{} (PgUp)", t.prev_month)).clicked() {
                 self.cal = calendar::shift_month(year, month, -1);
             }
-            if theme::button(ui, t.today_btn, Btn::Ghost, p).clicked() {
+            if widgets::btn(ui, t.today_btn, Btn::Ghost, p).clicked() {
                 self.cal = (self.today.year(), self.today.month());
             }
             if widgets::icon_button(ui, Icon::Right, 32.0, p).on_hover_text(format!("{} (PgDn)", t.next_month)).clicked() {
@@ -137,7 +143,7 @@ impl App {
 
         let (year, month) = self.cal;
         let grid = calendar::month_grid(year, month, self.week_start());
-        let items = items_in_range(&self.data.tasks, grid[0], grid[41], self.cfg.filter, self.cfg.hide_done, self.today);
+        let items = items_in_range(&self.data.tasks, grid[0], grid[41], self.cfg.filter, self.cfg.hide_done, self.now);
 
         // Weekday header.
         let area = ui.available_rect_before_wrap();
@@ -229,7 +235,7 @@ impl App {
                 if is_dragged {
                     ui.painter().rect_stroke(chip, 5.0, Stroke::new(1.0, p.line), StrokeKind::Inside);
                 } else {
-                    paint_chip(ui, chip, item, &task.title, pc, ttxt.as_deref(), resp.hovered(), p);
+                    paint_chip(ui, chip, item, &task.title, pc, ttxt.as_deref(), task.is_cancelled(), resp.hovered(), p);
                 }
                 if resp.clicked() {
                     open_task = Some(item.task_id.clone());
@@ -295,15 +301,17 @@ impl App {
             time: None,
             done: false,
             overdue: false,
+            past: false,
             profile: task.profile,
         };
+        let cancelled = task.is_cancelled();
         let title = task.title.clone();
         let pc = self.color_of(task.profile);
         egui::Area::new(egui::Id::unique("drag-ghost")).order(Order::Tooltip).fixed_pos(pos + vec2(10.0, 6.0)).interactable(false).show(ctx, |ui| {
             let (rect, _) = ui.allocate_exact_size(vec2(160.0, CHIP_H + 2.0), Sense::hover());
             ui.painter().rect_filled(rect.expand(1.0), 6.0, Color32::from_black_alpha(60));
             ui.painter().rect_filled(rect, 5.0, p.card);
-            paint_chip(ui, rect, &item, &title, pc, None, true, p);
+            paint_chip(ui, rect, &item, &title, pc, None, cancelled, true, p);
         });
     }
 }

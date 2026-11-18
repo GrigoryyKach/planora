@@ -7,9 +7,9 @@ use crate::fmt;
 use crate::model::calendar::{items_in_range, ItemKind};
 use crate::model::ProfileFilter;
 use crate::pdf;
-use crate::theme::{self, Btn, Pal};
+use crate::theme::{self, Pal};
 use chrono::NaiveDate;
-use eframe::egui::{self, Align, Layout, RichText, Ui};
+use eframe::egui::{self, RichText, Ui};
 use std::path::PathBuf;
 
 #[derive(Clone)]
@@ -56,7 +56,7 @@ impl App {
                 (title, subtitle, rows, file)
             }
             ExportTarget::Day(d) => {
-                let items = items_in_range(&self.data.tasks, *d, *d, self.cfg.filter, self.cfg.hide_done, self.today).remove(d).unwrap_or_default();
+                let items = items_in_range(&self.data.tasks, *d, *d, self.cfg.filter, self.cfg.hide_done, self.now).remove(d).unwrap_or_default();
                 let rows = items
                     .iter()
                     .filter_map(|i| {
@@ -92,12 +92,13 @@ impl App {
             ui.add_space(4.0);
             ui.add(egui::Label::new(RichText::new(path.display().to_string()).font(theme::reg(12.5)).color(p.muted)).wrap());
             ui.add_space(14.0);
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if super::dialogs::primary(ui, self, t.open, 110.0, true, p) {
-                    let _ = std::process::Command::new(if cfg!(windows) { "explorer.exe" } else { "xdg-open" }).arg(&path).spawn();
-                    close = true;
-                }
-                if theme::button(ui, t.show_in_folder, Btn::Ghost, p).clicked() {
+            let f = super::dialogs::footer(ui, self, p, None, &[t.close, t.show_in_folder], t.open, true);
+            if f.primary {
+                let _ = std::process::Command::new(if cfg!(windows) { "explorer.exe" } else { "xdg-open" }).arg(&path).spawn();
+                close = true;
+            }
+            match f.secondary {
+                Some(1) => {
                     #[cfg(windows)]
                     let _ = std::process::Command::new("explorer.exe").arg(format!("/select,{}", path.display())).spawn();
                     // No portable "select this file" on Linux: open the folder that holds it.
@@ -107,10 +108,9 @@ impl App {
                     }
                     close = true;
                 }
-                if theme::button(ui, t.close, Btn::Ghost, p).clicked() {
-                    close = true;
-                }
-            });
+                Some(_) => close = true,
+                None => {}
+            }
         });
         if close || backdrop {
             return None;

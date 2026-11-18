@@ -1,6 +1,6 @@
 //! Dialog dispatch and the form dialogs: quick add, search, project, delete project.
 
-use super::dialogs::{color_swatches, modal, primary, Dialog, ProjectForm};
+use super::dialogs::{color_swatches, footer, modal, Dialog, ProjectForm};
 use super::widgets::{self, Icon};
 use super::{App, DateTarget};
 use crate::config::Nav;
@@ -8,7 +8,7 @@ use crate::fmt;
 use crate::model::Profile;
 use crate::theme::{self, Btn, Pal};
 use chrono::NaiveDate;
-use eframe::egui::{self, Align, CursorIcon, Layout, Rect, RichText, ScrollArea, Sense, Ui, pos2, vec2};
+use eframe::egui::{self, CursorIcon, Rect, RichText, ScrollArea, Sense, Ui, pos2, vec2};
 
 impl App {
     pub(super) fn dialog_ui(&mut self, ctx: &egui::Context, p: &Pal) {
@@ -66,9 +66,7 @@ impl App {
                     }
                 }
                 let current = project.as_deref().and_then(|id| self.project_name(id)).unwrap_or(t.inbox).to_string();
-                egui::ComboBox::from_id_salt("qa-project")
-                    .selected_text(RichText::new(current).font(theme::reg(13.5)))
-                    .width(ui.available_width())
+                widgets::combo("qa-project", &current, ui.available_width())
                     .show_ui(ui, |ui| {
                         if ui.selectable_label(project.is_none(), t.inbox).clicked() {
                             project = None;
@@ -84,7 +82,7 @@ impl App {
             ui.horizontal(|ui| {
                 ui.label(RichText::new(t.date_label).font(theme::reg(13.5)).color(p.muted));
                 let text = date.map(|d| fmt::date_full(self.lang, d)).unwrap_or_else(|| t.set_date.to_string());
-                let resp = theme::button(ui, &text, if date.is_some() { Btn::Soft } else { Btn::Ghost }, p);
+                let resp = widgets::btn(ui, &text, if date.is_some() { Btn::Soft } else { Btn::Ghost }, p);
                 if resp.clicked() {
                     pick = Some(resp.rect);
                 }
@@ -93,14 +91,9 @@ impl App {
                 }
             });
             ui.add_space(14.0);
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if primary(ui, self, t.add, 120.0, !title.trim().is_empty(), p) {
-                    submit = true;
-                }
-                if theme::button(ui, t.cancel, Btn::Ghost, p).clicked() {
-                    close = true;
-                }
-            });
+            let f = footer(ui, self, p, None, &[t.cancel], t.add, !title.trim().is_empty());
+            submit |= f.primary;
+            close |= f.secondary.is_some();
         });
         if let Some(r) = pick {
             // Keep the typed text while the picker is open.
@@ -159,7 +152,10 @@ impl App {
             } else if hits.is_empty() {
                 theme::hint(ui, t.search_none, p);
             } else {
-                ScrollArea::vertical().max_height(360.0).auto_shrink([false, true]).show(ui, |ui| {
+                // Compact with few results, grows with them up to ~60% of the window, then scrolls.
+                let max_h = (ctx.content_rect().height() * 0.6 - 120.0).max(160.0);
+                let h = (hits.len() as f32 * 42.0 + 4.0).min(max_h);
+                ScrollArea::vertical().max_height(h).min_scrolled_height(h).auto_shrink([false, true]).show(ui, |ui| {
                     for task in &hits {
                         let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 40.0), Sense::click());
                         if resp.hovered() {
@@ -237,19 +233,10 @@ impl App {
                 });
             }
             ui.add_space(14.0);
-            ui.horizontal(|ui| {
-                if editing && theme::button(ui, t.delete_project, Btn::Ghost, p).clicked() {
-                    delete = true;
-                }
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    if primary(ui, self, t.save, 120.0, !f.name.trim().is_empty(), p) {
-                        save = true;
-                    }
-                    if theme::button(ui, t.cancel, Btn::Ghost, p).clicked() {
-                        close = true;
-                    }
-                });
-            });
+            let out = footer(ui, self, p, editing.then_some(t.delete_project), &[t.cancel], t.save, !f.name.trim().is_empty());
+            delete |= out.left;
+            save |= out.primary;
+            close |= out.secondary.is_some();
         });
         if delete {
             if let Some(id) = f.id.clone() {
@@ -304,14 +291,9 @@ impl App {
                 }
             }
             ui.add_space(14.0);
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if primary(ui, self, t.delete, 120.0, true, p) {
-                    confirm = true;
-                }
-                if theme::button(ui, t.cancel, Btn::Ghost, p).clicked() {
-                    close = true;
-                }
-            });
+            let f = footer(ui, self, p, None, &[t.cancel], t.delete, true);
+            confirm |= f.primary;
+            close |= f.secondary.is_some();
         });
         if confirm {
             if to_inbox {

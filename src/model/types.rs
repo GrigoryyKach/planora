@@ -7,7 +7,7 @@ use std::hash::{BuildHasher, Hasher};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Current on-disk schema version of `data.json`.
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: u32 = 2;
 
 pub type Id = String;
 
@@ -173,6 +173,9 @@ pub struct Task {
     pub priority: Option<Priority>,
     #[serde(default)]
     pub deadline: Option<NaiveDate>,
+    /// Optional exact time of the deadline (schema 2); only meaningful together with `deadline`.
+    #[serde(default)]
+    pub deadline_time: Option<NaiveTime>,
     /// Day the task is planned on.
     #[serde(default)]
     pub scheduled: Option<NaiveDate>,
@@ -206,6 +209,7 @@ impl Task {
             status: None,
             priority: None,
             deadline: None,
+            deadline_time: None,
             scheduled: None,
             time: None,
             remind: Remind::Default,
@@ -216,6 +220,10 @@ impl Task {
             updated: now,
             completed_at: None,
         }
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.status == Some(Status::Cancelled)
     }
 
     /// Done or cancelled (a non-recurring task counts as closed).

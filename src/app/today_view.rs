@@ -30,9 +30,9 @@ impl App {
 
         let filter = self.cfg.filter;
         let hide = self.cfg.hide_done;
-        let overdue = overdue_items(&self.data.tasks, today, filter);
-        let todays = items_in_range(&self.data.tasks, today, today, filter, hide, today).remove(&today).unwrap_or_default();
-        let soon_map = items_in_range(&self.data.tasks, today + Duration::days(1), today + Duration::days(7), filter, hide, today);
+        let overdue = overdue_items(&self.data.tasks, self.now, filter);
+        let todays = items_in_range(&self.data.tasks, today, today, filter, hide, self.now).remove(&today).unwrap_or_default();
+        let soon_map = items_in_range(&self.data.tasks, today + Duration::days(1), today + Duration::days(7), filter, hide, self.now);
         let soon: Vec<Item> = soon_map.into_values().flatten().collect();
 
         let mut action = None;

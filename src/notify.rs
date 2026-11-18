@@ -143,7 +143,11 @@ pub fn reminder_body(lang: Lang, r: &Reminder, today: chrono::NaiveDate, h24: bo
     let time = fmt::time_text(r.event.time(), h24);
     let when = if r.event.date() == today { time } else { format!("{} {}", fmt::date_short(lang, r.event.date()), time) };
     let lead = if r.before == 0 { t.toast_now.to_string() } else { t.toast_in_min.replace("{n}", &r.before.to_string()) };
-    format!("{lead} · {when}")
+    if r.deadline {
+        format!("{}: {lead} · {when}", t.deadline_label)
+    } else {
+        format!("{lead} · {when}")
+    }
 }
 
 struct Shared {
@@ -181,7 +185,11 @@ impl Worker {
     pub fn update(&self, tasks: &[Task], default_before: u32, enabled: bool, lang: Lang, h24: bool) {
         let (lock, cv) = &*self.shared;
         if let Ok(mut s) = lock.lock() {
-            s.tasks = tasks.iter().filter(|t| t.time.is_some() && t.scheduled.is_some()).cloned().collect();
+            s.tasks = tasks
+                .iter()
+                .filter(|t| (t.time.is_some() && t.scheduled.is_some()) || (t.deadline_time.is_some() && t.deadline.is_some()))
+                .cloned()
+                .collect();
             s.default_before = default_before;
             s.enabled = enabled;
             s.lang = lang;
