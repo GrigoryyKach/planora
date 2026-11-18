@@ -139,7 +139,7 @@ impl App {
         });
         ui.add_space(6.0);
 
-        ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
+        ScrollArea::vertical().id_salt(ed.id.clone()).auto_shrink([false, false]).show(ui, |ui| {
             ui.set_width(ui.available_width() - 6.0);
             let w = ui.available_width();
 

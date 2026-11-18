@@ -35,6 +35,10 @@ pub mod widgets;
 
 pub use dialogs::Dialog;
 
+/// Width of the task side panel.
+pub const EDITOR_W: f32 = 372.0;
+/// The central area keeps at least this much when the side panel is open.
+const MIN_CENTRAL_W: f32 = 520.0;
 /// Minimum row height (see `App::new`).
 pub const ROW_H: f32 = 34.0;
 pub const ICON_PNG: &[u8] = include_bytes!("../../assets/icon.png");
@@ -650,26 +654,40 @@ impl eframe::App for App {
             }))
             .show(ui, |ui| self.sidebar(ui, &p));
 
+        // The central area and the task side panel are laid out by hand from the space left after the sidebar.
+        // A `Panel` remembers its size by id between frames; a rect computed fresh every frame cannot go stale,
+        // so the side panel always opens at its full width and is clipped to its own rectangle.
+        let area = ui.available_rect_before_wrap();
+        let editor_w = if self.editor.is_some() { EDITOR_W.min((area.width() - MIN_CENTRAL_W).max(300.0)) } else { 0.0 };
+        let central_rect = Rect::from_min_max(area.min, egui::pos2(area.right() - editor_w, area.bottom()));
+        {
+            ui.painter().rect_filled(central_rect, 0.0, p.bg);
+            let inner = Rect::from_min_max(
+                central_rect.min + egui::vec2(28.0, 20.0),
+                central_rect.max - egui::vec2(28.0, 16.0),
+            );
+            let mut cui = ui.new_child(egui::UiBuilder::new().id_salt("central").max_rect(inner).layout(egui::Layout::top_down(egui::Align::Min)));
+            cui.set_clip_rect(central_rect);
+            match self.cfg.nav.clone() {
+                Nav::Today => self.today_view(&mut cui, &p),
+                Nav::Calendar => self.calendar_view(&mut cui, &p),
+                Nav::Inbox(profile) => self.list_view(&mut cui, &p, list_view::Scope::Inbox(profile)),
+                Nav::Project(id) => self.list_view(&mut cui, &p, list_view::Scope::Project(id)),
+                Nav::Settings => self.settings_view(&mut cui, &p),
+            }
+        }
         if self.editor.is_some() {
-            let panel = egui::Panel::right("editor")
-                .exact_size(372.0)
-                .resizable(false)
-                .frame(Frame::new().fill(p.sidebar).inner_margin(Margin { left: 20, right: 14, top: 18, bottom: 12 }))
-                .show(ui, |ui| self.editor_panel(ui, &p));
-            self.editor_rect = Some(panel.response.rect);
+            let rect = Rect::from_min_max(egui::pos2(area.right() - editor_w, area.top()), area.max);
+            ui.painter().rect_filled(rect, 0.0, p.sidebar);
+            ui.painter().vline(rect.left(), rect.y_range(), egui::Stroke::new(1.0, p.line));
+            let inner = Rect::from_min_max(rect.min + egui::vec2(20.0, 18.0), rect.max - egui::vec2(14.0, 12.0));
+            let mut eui = ui.new_child(egui::UiBuilder::new().id_salt("editor-panel").max_rect(inner).layout(egui::Layout::top_down(egui::Align::Min)));
+            eui.set_clip_rect(rect);
+            self.editor_panel(&mut eui, &p);
+            self.editor_rect = Some(rect);
         } else {
             self.editor_rect = None;
         }
-
-        egui::CentralPanel::default().frame(Frame::new().fill(p.bg).inner_margin(Margin { left: 28, right: 28, top: 20, bottom: 16 })).show(ui, |ui| {
-            match self.cfg.nav.clone() {
-                Nav::Today => self.today_view(ui, &p),
-                Nav::Calendar => self.calendar_view(ui, &p),
-                Nav::Inbox(profile) => self.list_view(ui, &p, list_view::Scope::Inbox(profile)),
-                Nav::Project(id) => self.list_view(ui, &p, list_view::Scope::Project(id)),
-                Nav::Settings => self.settings_view(ui, &p),
-            }
-        });
 
         let modal_open = self.dialog.is_some() || self.day_panel.is_some();
         let gen = next_generation(self.modal_was_open, modal_open, modal_generation(&ctx));

@@ -44,7 +44,7 @@ impl App {
                     .list_rows(scope)
                     .into_iter()
                     .map(|x| pdf::Row {
-                        done: x.is_closed(),
+                        state: row_state(x.is_cancelled(), x.is_closed()),
                         time: x.scheduled.and(x.time).map(|tm| fmt::time_text(tm, self.h24())),
                         title: x.title.clone(),
                     })
@@ -62,7 +62,7 @@ impl App {
                     .filter_map(|i| {
                         let task = self.data.task(&i.task_id)?;
                         let title = if i.kind == ItemKind::Deadline { format!("{} ({})", task.title, t.pdf_deadline) } else { task.title.clone() };
-                        Some(pdf::Row { done: i.done, time: i.time.map(|tm| fmt::time_text(tm, self.h24())), title })
+                        Some(pdf::Row { state: row_state(task.is_cancelled(), i.done), time: i.time.map(|tm| fmt::time_text(tm, self.h24())), title })
                     })
                     .collect();
                 let sub = t.pdf_profile.replace("{p}", self.filter_name());
@@ -116,5 +116,15 @@ impl App {
             return None;
         }
         Some(Dialog::PdfSaved(path))
+    }
+}
+
+fn row_state(cancelled: bool, closed: bool) -> pdf::RowState {
+    if cancelled {
+        pdf::RowState::Cancelled
+    } else if closed {
+        pdf::RowState::Done
+    } else {
+        pdf::RowState::Open
     }
 }

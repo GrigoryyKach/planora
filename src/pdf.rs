@@ -18,8 +18,16 @@ const LINE_H: f32 = 6.4;
 /// Millimetres per point.
 const MM: f32 = 25.4 / 72.0;
 
+/// Open, done (ticked box) or cancelled (crossed box). Done and cancelled titles are struck through.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum RowState {
+    Open,
+    Done,
+    Cancelled,
+}
+
 pub struct Row {
-    pub done: bool,
+    pub state: RowState,
     pub time: Option<String>,
     pub title: String,
 }
@@ -36,7 +44,7 @@ pub struct Doc {
 
 enum Item {
     Text { x: f32, y: f32, size: f32, bold: bool, grey: f32, text: String },
-    Line { pts: Vec<(f32, f32)>, closed: bool, width: f32, grey: f32 },
+    Line { pts: Vec<(f32, f32)>, closed: bool, width: f32, rgb: (f32, f32, f32) },
 }
 
 struct Fonts {
@@ -110,7 +118,7 @@ pub fn render(doc: &Doc) -> Result<Vec<u8>, String> {
         pages[0].push(Item::Text { x: MARGIN, y, size: 11.0, bold: false, grey: 0.4, text: doc.subtitle.clone() });
         y += 4.5;
     }
-    pages[0].push(Item::Line { pts: vec![(MARGIN, y), (PAGE_W - MARGIN, y)], closed: false, width: 0.6, grey: 0.75 });
+    pages[0].push(Item::Line { pts: vec![(MARGIN, y), (PAGE_W - MARGIN, y)], closed: false, width: 0.6, rgb: (0.75, 0.75, 0.75) });
     y += 9.0;
     let bottom = PAGE_H - MARGIN - 6.0;
     let box_size = 3.6;
@@ -128,22 +136,30 @@ pub fn render(doc: &Doc) -> Result<Vec<u8>, String> {
             y = MARGIN + 7.0;
         }
         let page = pages.last_mut().expect("page");
-        let grey = if row.done { 0.55 } else { 0.1 };
-        // Checkbox, with a tick when done.
+        let closed = row.state != RowState::Open;
+        let grey = if closed { 0.55 } else { 0.1 };
+        // Checkbox: empty, ticked (done) or crossed in red (cancelled).
         let (bx, by) = (MARGIN, y - box_size + 0.6);
+        let red = (0.82, 0.22, 0.25);
+        let outline = if row.state == RowState::Cancelled { red } else { (0.35, 0.35, 0.35) };
         page.push(Item::Line {
             pts: vec![(bx, by), (bx + box_size, by), (bx + box_size, by + box_size), (bx, by + box_size)],
             closed: true,
             width: 0.7,
-            grey: 0.35,
+            rgb: outline,
         });
-        if row.done {
-            page.push(Item::Line {
+        match row.state {
+            RowState::Done => page.push(Item::Line {
                 pts: vec![(bx + 0.7, by + box_size * 0.55), (bx + box_size * 0.42, by + box_size - 0.8), (bx + box_size - 0.5, by + 0.6)],
                 closed: false,
                 width: 1.0,
-                grey: 0.2,
-            });
+                rgb: (0.2, 0.2, 0.2),
+            }),
+            RowState::Cancelled => {
+                page.push(Item::Line { pts: vec![(bx + 0.8, by + 0.8), (bx + box_size - 0.8, by + box_size - 0.8)], closed: false, width: 1.0, rgb: red });
+                page.push(Item::Line { pts: vec![(bx + box_size - 0.8, by + 0.8), (bx + 0.8, by + box_size - 0.8)], closed: false, width: 1.0, rgb: red });
+            }
+            RowState::Open => {}
         }
         let mut x = MARGIN + indent;
         if let Some(t) = &row.time {
@@ -152,7 +168,13 @@ pub fn render(doc: &Doc) -> Result<Vec<u8>, String> {
         }
         for (i, l) in lines.iter().enumerate() {
             let lx = if i == 0 { x } else { MARGIN + indent + time_w };
-            page.push(Item::Text { x: lx, y: y + LINE_H * i as f32, size: BODY_SIZE, bold: false, grey, text: l.clone() });
+            let ly = y + LINE_H * i as f32;
+            page.push(Item::Text { x: lx, y: ly, size: BODY_SIZE, bold: false, grey, text: l.clone() });
+            if closed {
+                // Done and cancelled titles are struck through, as in the app.
+                let w = fonts.width(l, BODY_SIZE, false);
+                page.push(Item::Line { pts: vec![(lx, ly - 1.3), (lx + w, ly - 1.3)], closed: false, width: 0.5, rgb: (grey, grey, grey) });
+            }
         }
         y += height + 1.2;
     }
@@ -184,8 +206,8 @@ pub fn render(doc: &Doc) -> Result<Vec<u8>, String> {
                     ops.push(Op::ShowText { items: vec![TextItem::Text(text.clone())] });
                     ops.push(Op::EndTextSection);
                 }
-                Item::Line { pts, closed, width, grey: g } => {
-                    ops.push(Op::SetOutlineColor { col: grey(*g) });
+                Item::Line { pts, closed, width, rgb } => {
+                    ops.push(Op::SetOutlineColor { col: Color::Rgb(Rgb { r: rgb.0, g: rgb.1, b: rgb.2, icc_profile: None }) });
                     ops.push(Op::SetOutlineThickness { pt: Pt(*width / MM) });
                     ops.push(Op::DrawLine {
                         line: Line {
@@ -218,12 +240,13 @@ mod tests {
 
     fn doc(n: usize) -> Doc {
         let mut rows = vec![
-            Row { done: false, time: Some("09:30".into()), title: "Call the dentist".into() },
-            Row { done: true, time: None, title: "Купить молоко и хлеб, позвонить маме".into() },
-            Row { done: false, time: Some("18:00".into()), title: "Підготувати звіт про проєкт".into() },
+            Row { state: RowState::Open, time: Some("09:30".into()), title: "Call the dentist".into() },
+            Row { state: RowState::Done, time: None, title: "Купить молоко и хлеб, позвонить маме".into() },
+            Row { state: RowState::Cancelled, time: None, title: "Скасоване завдання / cancelled task".into() },
+            Row { state: RowState::Open, time: Some("18:00".into()), title: "Підготувати звіт про проєкт".into() },
         ];
         for i in 0..n {
-            rows.push(Row { done: i % 3 == 0, time: (i % 5 == 0).then(|| "12:15".to_string()), title: format!("Task number {i}: a reasonably long title that may need to wrap onto a second line when the page is narrow, Завдання {i}") });
+            rows.push(Row { state: if i % 3 == 0 { RowState::Done } else if i % 7 == 0 { RowState::Cancelled } else { RowState::Open }, time: (i % 5 == 0).then(|| "12:15".to_string()), title: format!("Task number {i}: a reasonably long title that may need to wrap onto a second line when the page is narrow, Завдання {i}") });
         }
         Doc { title: "Проект «Ремонт» / Home".into(), subtitle: "Personal".into(), rows, page_label: "Page {n} of {total}".into(), empty_label: "No tasks".into() }
     }

@@ -43,12 +43,12 @@ fn main() -> eframe::Result<()> {
     let mut viewport = egui::ViewportBuilder::default()
         .with_title(platform::WINDOW_TITLE)
         .with_app_id("local.planora")
-        .with_min_inner_size([1000.0, 640.0])
+        .with_min_inner_size([1120.0, 660.0])
         .with_visible(!minimized)
         .with_icon(std::sync::Arc::new(app_icon()));
     let mut centered = true;
     match cfg.window {
-        Some(w) if w.w >= 1000.0 && w.h >= 640.0 => {
+        Some(w) if w.w >= 1120.0 && w.h >= 660.0 => {
             viewport = viewport.with_inner_size([w.w, w.h]);
             if let (Some(x), Some(y)) = (w.x, w.y) {
                 if x > -20000.0 && y > -20000.0 && x < 20000.0 && y < 20000.0 {
