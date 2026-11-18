@@ -316,7 +316,8 @@ impl App {
             widgets::multi_select(ui, "f-deadline", t.deadline_label, all, t.clear, &[t.dl_overdue, t.dl_today, t.dl_week, t.dl_none], &mut self.filter.deadline, p);
             ui.add_space(6.0);
             // The sort label and its dropdown stay together when the row wraps.
-            ui.horizontal(|ui| {
+            let sort_w = ui.painter().layout_no_wrap(t.sort_by.to_string(), theme::reg(13.0), p.muted).size().x + 8.0 + 130.0 + 16.0;
+            ui.allocate_ui_with_layout(vec2(sort_w, super::ROW_H), Layout::left_to_right(Align::Center), |ui| {
                 let mut s = self.cfg.sort;
                 ui.label(RichText::new(t.sort_by).font(theme::reg(13.0)).color(p.muted));
                 let names = [(SortMode::Manual, t.sort_manual), (SortMode::Deadline, t.sort_deadline), (SortMode::Priority, t.sort_priority), (SortMode::Created, t.sort_created)];

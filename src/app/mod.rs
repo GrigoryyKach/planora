@@ -527,8 +527,8 @@ impl App {
             self.flush();
             self.editor = None;
         }
-        // Escape closes the top-most thing.
-        if ctx.input_mut(|i| i.consume_key(none, Key::Escape)) {
+        // Escape closes the top-most thing. An open dropdown or context menu gets it first.
+        if !egui::Popup::is_any_open(ctx) && ctx.input_mut(|i| i.consume_key(none, Key::Escape)) {
             if self.picker.is_some() {
                 self.picker = None;
             } else if self.dialog.is_some() {

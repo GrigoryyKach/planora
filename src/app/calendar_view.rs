@@ -111,13 +111,16 @@ impl App {
 
     pub(super) fn hide_done_toggle(&mut self, ui: &mut Ui, p: &Pal, narrow: bool) {
         let ctx = ui.ctx().clone();
-        // Label and switch form one block, so a wrapping row never separates them.
-        ui.horizontal(|ui| {
+        let label = self.s().hide_done;
+        // Label and switch form one block of known width, so a wrapping row moves them together
+        // instead of overflowing or splitting them.
+        let lw = if narrow { 0.0 } else { ui.painter().layout_no_wrap(label.to_string(), theme::reg(13.0), p.muted).size().x + 8.0 };
+        ui.allocate_ui_with_layout(vec2(lw + 42.0, super::ROW_H), Layout::left_to_right(Align::Center), |ui| {
             if !narrow {
-                ui.add(egui::Label::new(RichText::new(self.s().hide_done).font(theme::reg(13.0)).color(p.muted)).wrap_mode(egui::TextWrapMode::Extend));
+                ui.add(egui::Label::new(RichText::new(label).font(theme::reg(13.0)).color(p.muted)).wrap_mode(egui::TextWrapMode::Extend));
             }
             let mut hide = self.cfg.hide_done;
-            if theme::switch(ui, &mut hide, p).on_hover_text(self.s().hide_done).changed() {
+            if theme::switch(ui, &mut hide, p).on_hover_text(label).changed() {
                 self.cfg.hide_done = hide;
                 self.touch_cfg(&ctx);
             }
