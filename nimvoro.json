@@ -58,7 +58,7 @@
   "linux": {
     "asset": "Planora-linux-x64.tar.gz",
     "exe": "planora",
-    "requirements": "Linux x86_64 (X11 or Wayland) with GTK 3 and libayatana-appindicator3 (tray icon; GNOME also needs the AppIndicator extension), a notification service and xdg-utils"
+    "requirements": "Linux x86_64 (X11 or Wayland) with GTK 3 and libayatana-appindicator3 (tray icon; GNOME also needs the AppIndicator extension), xdg-desktop-portal (file dialogs), a notification service and xdg-utils"
   },
   "settingsDir": "%APPDATA%\\Planora",
   "i18n": {
@@ -100,7 +100,7 @@
         "Windows 10/11 x64"
       ],
       "linux": {
-        "requirements": "Linux x86_64 (X11 или Wayland) с GTK 3 и libayatana-appindicator3 (значок в трее; в GNOME нужно расширение AppIndicator), службой уведомлений и xdg-utils"
+        "requirements": "Linux x86_64 (X11 или Wayland) с GTK 3 и libayatana-appindicator3 (значок в трее; в GNOME нужно расширение AppIndicator), xdg-desktop-portal (диалоги файлов), службой уведомлений и xdg-utils"
       }
     },
     "uk": {
@@ -141,7 +141,7 @@
         "Windows 10/11 x64"
       ],
       "linux": {
-        "requirements": "Linux x86_64 (X11 або Wayland) з GTK 3 і libayatana-appindicator3 (значок у треї; у GNOME потрібне розширення AppIndicator), службою сповіщень і xdg-utils"
+        "requirements": "Linux x86_64 (X11 або Wayland) з GTK 3 і libayatana-appindicator3 (значок у треї; у GNOME потрібне розширення AppIndicator), xdg-desktop-portal (діалоги файлів), службою сповіщень і xdg-utils"
       }
     }
   }

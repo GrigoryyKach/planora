@@ -67,7 +67,7 @@ With `PLANORA_DATA_DIR` set, the notification shortcut is named `Planora (test).
 
 ### Linux
 
-Unpack the archive and run `./planora`. Runtime needs: GTK 3 (file dialogs), `libayatana-appindicator3` (tray icon), a notification service (every desktop has one) and `xdg-utils`.
+Unpack the archive and run `./planora`. Runtime needs: GTK 3 and `libayatana-appindicator3` (tray icon), `xdg-desktop-portal` (file dialogs), a notification service (every desktop has one) and `xdg-utils`.
 To build from source:
 
 ```bash
@@ -82,7 +82,7 @@ cargo build --release
 - **Autostart** (Settings) writes `~/.config/autostart/planora.desktop` with `--minimized`.
 - **Single instance.** A unix socket in `$XDG_RUNTIME_DIR`; starting Planora again brings the running window forward.
 - **Wayland.** The window position cannot be restored (the compositor decides), and hiding/showing the window goes through the compositor. Not verified on a live Wayland session.
-- **PDF export** is the same as on Windows; the save dialog is the GTK one.
+- **PDF export** is the same as on Windows; the save dialog goes through `xdg-desktop-portal`.
 
 ## Notifications (Windows)
 
