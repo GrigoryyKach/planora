@@ -183,12 +183,14 @@ strings! {
         time_format: "Time format", "Формат времени", "Формат часу";
         week_fixed_hint: "The week starts on Monday and time is shown in 24-hour format.", "Неделя начинается с понедельника, время показывается в 24-часовом формате.", "Тиждень починається з понеділка, час показується в 24-годинному форматі.";
         autostart: "Start with Windows", "Запускать вместе с Windows", "Запускати разом із Windows";
+        autostart_os: "Start with the system", "Запускать вместе с системой", "Запускати разом із системою";
         autostart_hint: "Planora starts minimised in the tray so reminders keep working.", "Planora запускается свёрнутой в трей, чтобы напоминания работали.", "Planora запускається згорнутою в трей, щоб нагадування працювали.";
         autostart_failed: "Could not change the startup setting.", "Не удалось изменить автозапуск.", "Не вдалося змінити автозапуск.";
         close_to_tray: "Close to tray", "Сворачивать в трей при закрытии", "Згортати в трей при закритті";
         close_to_tray_hint: "The close button hides Planora instead of quitting, so reminders keep working.", "Кнопка закрытия прячет Planora в трей, а не завершает её, поэтому напоминания работают.", "Кнопка закриття ховає Planora в трей, а не завершує її, тому нагадування працюють.";
         notifications: "Notifications", "Уведомления", "Сповіщення";
         notifications_hint: "Show a Windows notification when a reminder is due.", "Показывать уведомление Windows, когда подходит время напоминания.", "Показувати сповіщення Windows, коли настає час нагадування.";
+        notifications_hint_os: "Show a desktop notification when a reminder is due.", "Показывать уведомление на рабочем столе, когда подходит время напоминания.", "Показувати сповіщення на робочому столі, коли настає час нагадування.";
         default_reminder: "Default reminder", "Напоминание по умолчанию", "Нагадування за замовчуванням";
         open_data_folder: "Open data folder", "Открыть папку данных", "Відкрити теку даних";
         export_json: "Export JSON", "Экспорт в JSON", "Експорт у JSON";

@@ -1,6 +1,6 @@
 [package]
 name = "planora"
-version = "1.0.0"
+version = "1.1.0"
 edition = "2021"
 build = "build.rs"
 description = "A local, offline planner with a calendar, projects and reminders"
@@ -16,12 +16,21 @@ eframe = { version = "0.37.0", default-features = false, features = ["default_fo
 rfd = "0.15.4"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
-tauri-winrt-notification = "0.8.1"
 tray-icon = { version = "0.26.1", default-features = false }
-winreg = "0.56.0"
 printpdf = { version = "0.12.9", default-features = false }
+
+[target.'cfg(windows)'.dependencies]
+tauri-winrt-notification = "0.8.1"
+winreg = "0.56.0"
 windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_UI_Shell", "Win32_UI_Shell_PropertiesSystem", "Win32_Storage_EnhancedStorage", "Win32_System_Variant"] }
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging", "Win32_Security"] }
+
+[target.'cfg(unix)'.dependencies]
+eframe = { version = "0.37.0", default-features = false, features = ["x11", "wayland"] }
+libc = "0.2"
+gtk = "0.18"
+tray-icon = { version = "0.26.1", default-features = false, features = ["libappindicator"] }
+notify-rust = "4"
 
 [profile.release]
 opt-level = 3

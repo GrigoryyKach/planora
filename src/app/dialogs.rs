@@ -111,5 +111,5 @@ pub(super) fn color_swatches(ui: &mut Ui, color: &mut u32, p: &Pal) {
 /// Opens a folder in Explorer.
 pub fn open_folder(dir: &std::path::Path) {
     let _ = std::fs::create_dir_all(dir);
-    let _ = std::process::Command::new("explorer.exe").arg(dir).spawn();
+    let _ = std::process::Command::new(if cfg!(windows) { "explorer.exe" } else { "xdg-open" }).arg(dir).spawn();
 }

@@ -147,7 +147,13 @@ impl App {
         let worker = Worker::start(dir.clone(), icon_path, lang);
         worker.update(&data.tasks, cfg.default_remind, cfg.notifications, lang, cfg.time_24h);
 
+        platform::init(&cc.egui_ctx);
         let tray = Tray::new(lang, ICON_PNG);
+        // Without a tray (for example GNOME without the AppIndicator extension) a hidden window could never come back.
+        if start_hidden && tray.is_none() {
+            platform::show_main_window();
+        }
+        let start_hidden = start_hidden && tray.is_some();
         {
             let ctx = cc.egui_ctx.clone();
             platform::watch_for_second_launch(move || {

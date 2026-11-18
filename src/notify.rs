@@ -13,11 +13,14 @@ use crate::model::Task;
 use crate::strings;
 use chrono::{Duration, Local, NaiveDateTime};
 use std::path::PathBuf;
+#[cfg(windows)]
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 
+#[cfg(windows)]
 const AUMID: &str = "Planora.App";
 
+#[cfg(windows)]
 static IDENTITY_OK: AtomicBool = AtomicBool::new(false);
 
 /// Windows only shows toasts for an AppUserModelID that belongs to a Start-menu shortcut.
@@ -25,6 +28,7 @@ static IDENTITY_OK: AtomicBool = AtomicBool::new(false);
 /// the same shortcut at install time; we only add the ID. With `PLANORA_DATA_DIR` set (tests, screenshots)
 /// a separate `Planora (test).lnk` is used so a real shortcut is never touched.
 /// Returns `false` when it failed; toasts then go out under the PowerShell identity instead.
+#[cfg(windows)]
 pub fn register_identity() -> bool {
     let ok = tag_shortcut().is_ok();
     IDENTITY_OK.store(ok, Ordering::Relaxed);
@@ -32,11 +36,13 @@ pub fn register_identity() -> bool {
 }
 
 /// Path of the Start-menu shortcut used for the toast identity.
+#[cfg(windows)]
 pub fn shortcut_path() -> Option<PathBuf> {
     let name = if std::env::var_os("PLANORA_DATA_DIR").is_some() { "Planora (test).lnk" } else { "Planora.lnk" };
     Some(dirs::config_dir()?.join("Microsoft").join("Windows").join("Start Menu").join("Programs").join(name))
 }
 
+#[cfg(windows)]
 fn tag_shortcut() -> windows::core::Result<()> {
     use windows::core::{Interface, PCWSTR};
     use windows::Win32::Storage::EnhancedStorage::PKEY_AppUserModel_ID;
@@ -82,7 +88,14 @@ fn tag_shortcut() -> windows::core::Result<()> {
     Ok(())
 }
 
+/// Linux needs no notification identity.
+#[cfg(not(windows))]
+pub fn register_identity() -> bool {
+    true
+}
+
 /// Shows one toast. Clicking it opens the task.
+#[cfg(windows)]
 pub fn toast(title: &str, body: &str, icon_png: &std::path::Path, task_id: Option<String>) -> Result<(), String> {
     use tauri_winrt_notification::{IconCrop, Toast};
     let id = if IDENTITY_OK.load(Ordering::Relaxed) { AUMID } else { Toast::POWERSHELL_APP_ID };
@@ -96,6 +109,32 @@ pub fn toast(title: &str, body: &str, icon_png: &std::path::Path, task_id: Optio
         Ok(())
     });
     t.show().map_err(|e| e.to_string())
+}
+
+/// Shows one desktop notification (freedesktop notification service). Clicking it opens the task.
+#[cfg(not(windows))]
+pub fn toast(title: &str, body: &str, icon_png: &std::path::Path, task_id: Option<String>) -> Result<(), String> {
+    let handle = notify_rust::Notification::new()
+        .appname("Planora")
+        .summary(title)
+        .body(body)
+        .icon(&icon_png.display().to_string())
+        .action("default", "Open")
+        .show()
+        .map_err(|e| e.to_string())?;
+    // `wait_for_action` blocks until the notification is closed, so it gets its own thread.
+    std::thread::spawn(move || {
+        handle.wait_for_action(|action| {
+            if action == "default" {
+                crate::platform::show_main_window();
+                match &task_id {
+                    Some(id) => bus::push(Cmd::OpenTask(id.clone())),
+                    None => bus::push(Cmd::Show),
+                }
+            }
+        });
+    });
+    Ok(())
 }
 
 /// Text under the title: "In 10 min · 14:30" or "Now · 14:30" (with the date when it is not today).

@@ -10,11 +10,19 @@ mod model;
 mod nimvoro;
 mod notify;
 mod pdf;
+#[cfg(windows)]
+mod platform;
+#[cfg(not(windows))]
+#[path = "platform_linux.rs"]
 mod platform;
 mod strings;
 mod support;
 #[allow(dead_code)]
 mod theme;
+#[cfg(windows)]
+mod tray;
+#[cfg(not(windows))]
+#[path = "tray_linux.rs"]
 mod tray;
 
 use eframe::egui;

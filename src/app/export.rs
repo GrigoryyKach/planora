@@ -94,11 +94,17 @@ impl App {
             ui.add_space(14.0);
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 if super::dialogs::primary(ui, self, t.open, 110.0, true, p) {
-                    let _ = std::process::Command::new("explorer.exe").arg(&path).spawn();
+                    let _ = std::process::Command::new(if cfg!(windows) { "explorer.exe" } else { "xdg-open" }).arg(&path).spawn();
                     close = true;
                 }
                 if theme::button(ui, t.show_in_folder, Btn::Ghost, p).clicked() {
+                    #[cfg(windows)]
                     let _ = std::process::Command::new("explorer.exe").arg(format!("/select,{}", path.display())).spawn();
+                    // No portable "select this file" on Linux: open the folder that holds it.
+                    #[cfg(not(windows))]
+                    if let Some(dir) = path.parent() {
+                        let _ = std::process::Command::new("xdg-open").arg(dir).spawn();
+                    }
                     close = true;
                 }
                 if theme::button(ui, t.close, Btn::Ghost, p).clicked() {

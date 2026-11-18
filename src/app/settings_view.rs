@@ -119,7 +119,7 @@ impl App {
             // ── Behaviour
             group(ui, p, t.group_behaviour, |ui| {
                 let mut auto = self.autostart;
-                if switch_row(ui, p, t.autostart, t.autostart_hint, &mut auto) {
+                if switch_row(ui, p, if cfg!(windows) { t.autostart } else { t.autostart_os }, t.autostart_hint, &mut auto) {
                     let ok = platform::set_autostart(auto);
                     self.autostart = platform::autostart_enabled();
                     self.settings_msg = if ok && self.autostart == auto { None } else { Some(t.autostart_failed.to_string()) };
@@ -130,7 +130,7 @@ impl App {
                     self.touch_cfg(&ctx);
                 }
                 let mut v = self.cfg.notifications;
-                if switch_row(ui, p, t.notifications, t.notifications_hint, &mut v) {
+                if switch_row(ui, p, t.notifications, if cfg!(windows) { t.notifications_hint } else { t.notifications_hint_os }, &mut v) {
                     self.cfg.notifications = v;
                     self.sync_worker();
                     self.touch_cfg(&ctx);

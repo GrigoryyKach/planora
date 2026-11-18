@@ -11,6 +11,9 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 };
 
 pub const WINDOW_TITLE: &str = "Planora";
+
+/// Hands the egui context to the platform layer (needed on Linux to show and hide the window; nothing to do here).
+pub fn init(_ctx: &eframe::egui::Context) {}
 /// Names of the single-instance mutex and the "show" event. With `PLANORA_DATA_DIR` set (tests, screenshots)
 /// they get a suffix, so a test instance never talks to the user's real Planora.
 fn names() -> (String, String) {

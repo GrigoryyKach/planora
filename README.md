@@ -1,6 +1,6 @@
 # Planora
 
-A calm, local planner for tasks, projects and your calendar. It works fully offline, with no account and no cloud. Part of the [NIMVORO](https://github.com/GrigoryyKach/nimvoro) suite.
+A calm, local planner for tasks, projects and your calendar, for Windows and Linux. It works fully offline, with no account and no cloud. Part of the [NIMVORO](https://github.com/GrigoryyKach/nimvoro) suite.
 
 ![Calendar](assets/screenshots/1.png)
 
@@ -12,7 +12,7 @@ A calm, local planner for tasks, projects and your calendar. It works fully offl
 - **Tasks.** Only the title is required. Optional: description, links (with Open and Copy), status, priority, deadline, a planned day with an exact time, a checklist (`2/5` progress), repeat and a reminder.
 - **Projects.** Progress card, colour, archive. Lists have filters (status, priority, deadline, text), sorting (manual, deadline, priority, newest) and quick actions on every row: click the status to cycle it, right-click to set status, priority, deadline or plan, to move, duplicate or delete. Deleting offers Undo.
 - **Repeats.** Daily, weekdays, weekly, monthly (the 31st becomes the last day of shorter months) or every N days, with an optional end date. Completing one occurrence does not complete the series.
-- **Reminders.** A Windows notification at the task time, or 5, 10, 15 or 30 minutes before (a per-task choice, with a default in Settings). Planora stays in the tray when you close the window, and starts minimised to the tray with Windows. Reminders missed while it was off appear once in a "Missed reminders" list. Clicking a notification opens the task.
+- **Reminders.** A system notification at the task time, or 5, 10, 15 or 30 minutes before (a per-task choice, with a default in Settings). Planora stays in the tray when you close the window, and starts minimised to the tray with the system. Reminders missed while it was off appear once in a "Missed reminders" list. Clicking a notification opens the task.
 - **Export to PDF.** A project, the Inbox, the Today view or a single day (from the day panel) becomes a simple A4 task list: a header, then one task per line with a checkbox and the time. Filters such as "Hide done" are respected. Latin and Cyrillic render correctly.
 - **Search.** `Ctrl+F` searches all tasks by title and description.
 - **Backup.** Autosave, one automatic backup per day (the last 14 are kept), JSON export and import, and restore from the backup list in Settings.
@@ -38,7 +38,7 @@ The sidebar is the main navigation: Today, Calendar, each profile's Inbox and pr
 
 ## Data and backups
 
-Everything is stored in `%APPDATA%\Planora\`:
+Everything is stored in `%APPDATA%\Planora\` on Windows and `~/.config/Planora/` on Linux:
 
 | File | Content |
 |---|---|
@@ -60,7 +60,31 @@ $env:PLANORA_DATA_DIR = "$env:TEMP\planora-demo"
 
 With `PLANORA_DATA_DIR` set, the notification shortcut is named `Planora (test).lnk` so a real Start-menu shortcut is never touched.
 
-## Notifications
+## Platforms
+
+- **Windows** 10/11 x64: `Planora-win-x64.zip` from the release, or via the NIMVORO launcher.
+- **Linux** x86_64, X11 and Wayland (built on Ubuntu 22.04, glibc 2.35 or newer): `Planora-linux-x64.tar.gz` from the release, or via the NIMVORO launcher.
+
+### Linux
+
+Unpack the archive and run `./planora`. Runtime needs: GTK 3 (file dialogs), `libayatana-appindicator3` (tray icon), a notification service (every desktop has one) and `xdg-utils`.
+To build from source:
+
+```bash
+sudo apt install build-essential pkg-config libgtk-3-dev libayatana-appindicator3-dev libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev libxdo-dev
+cargo build --release
+```
+
+- **Tray.** The icon is a StatusNotifier / AppIndicator icon (menu: Open, New task, Today, Support, Exit). KDE, XFCE and most panels show it;
+  **GNOME needs the "AppIndicator and KStatusNotifierItem Support" extension**. The protocol has no click event, so the icon only opens its menu.
+  Without a tray host, closing the window quits Planora (reminders only work while it runs) and `--minimized` shows the window anyway.
+- **Notifications** use the freedesktop notification service (`notify-rust`); clicking one opens the task where the desktop supports notification actions.
+- **Autostart** (Settings) writes `~/.config/autostart/planora.desktop` with `--minimized`.
+- **Single instance.** A unix socket in `$XDG_RUNTIME_DIR`; starting Planora again brings the running window forward.
+- **Wayland.** The window position cannot be restored (the compositor decides), and hiding/showing the window goes through the compositor. Not verified on a live Wayland session.
+- **PDF export** is the same as on Windows; the save dialog is the GTK one.
+
+## Notifications (Windows)
 
 Windows shows toasts only for an app identity that belongs to a Start-menu shortcut. Planora adds the identity `Planora.App` to `Start Menu\Programs\Planora.lnk` (it creates the shortcut if the launcher has not, and leaves an existing one untouched apart from the identity). If that fails, notifications go out under the Windows PowerShell identity instead. Notifications use WinRT toasts, not tray balloons.
 
@@ -70,18 +94,18 @@ English (default), Russian and Ukrainian. The starting language follows the NIMV
 
 ## Settings
 
-Language, theme (system, light, dark), first day of the week and time format (English), start with Windows (reflects the real registry state), close to tray, notifications, default reminder, profile colours, data tools (open folder, export, import, restore), update check.
+Language, theme (system, light, dark), first day of the week and time format (English), start with the system (reflects the real registry value / autostart file), close to tray, notifications, default reminder, profile colours, data tools (open folder, export, import, restore), update check.
 
 ## Build
 
 Rust 2021, eframe/egui 0.37.
 
 ```powershell
-cargo build --release   # target\release\Planora.exe
+cargo build --release   # target\release\Planora.exe (target/release/Planora on Linux)
 cargo test
 ```
 
-Locally the GNU toolchain is used; CI (`.github/workflows/release.yml`) builds with MSVC when a `vX.Y.Z` tag is pushed and publishes `Planora-win-x64.zip`.
+Locally the GNU toolchain is used; CI (`.github/workflows/release.yml`) builds with MSVC (Windows job) and on Ubuntu 22.04 (Linux job) when a `vX.Y.Z` tag is pushed and publishes `Planora-win-x64.zip` and `Planora-linux-x64.tar.gz` in one release.
 
 Other tools: `tools/make_icon.py` redraws the icon, `tools/subset_fonts.py` re-subsets the bundled font.
 
