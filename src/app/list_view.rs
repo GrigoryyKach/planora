@@ -303,7 +303,9 @@ impl App {
     fn filter_bar(&mut self, ui: &mut Ui, p: &Pal) {
         let ctx = ui.ctx().clone();
         let t = self.s();
-        ui.horizontal(|ui| {
+        // Wrapped: on a narrow window (side panel open) the controls flow onto a second line instead of overflowing.
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing = vec2(8.0, 8.0);
             let mut q = std::mem::take(&mut self.filter.text);
             widgets::input(ui, &mut q, t.filter_hint, 220.0);
             self.filter.text = q;
@@ -313,29 +315,30 @@ impl App {
             widgets::multi_select(ui, "f-priority", t.priority_label, all, t.clear, &[t.priority_none, t.prio_low, t.prio_medium, t.prio_high, t.prio_urgent], &mut self.filter.priority, p);
             widgets::multi_select(ui, "f-deadline", t.deadline_label, all, t.clear, &[t.dl_overdue, t.dl_today, t.dl_week, t.dl_none], &mut self.filter.deadline, p);
             ui.add_space(6.0);
-            let mut s = self.cfg.sort;
-            ui.label(RichText::new(t.sort_by).font(theme::reg(13.0)).color(p.muted));
-            let names = [(SortMode::Manual, t.sort_manual), (SortMode::Deadline, t.sort_deadline), (SortMode::Priority, t.sort_priority), (SortMode::Created, t.sort_created)];
-            let cur = names.iter().find(|n| n.0 == s).map(|n| n.1).unwrap_or("");
-            widgets::combo("sort", cur, 130.0).show_ui(ui, |ui| {
-                for (m, n) in names {
-                    if ui.selectable_label(s == m, RichText::new(n).font(theme::reg(13.5))).clicked() {
-                        s = m;
+            // The sort label and its dropdown stay together when the row wraps.
+            ui.horizontal(|ui| {
+                let mut s = self.cfg.sort;
+                ui.label(RichText::new(t.sort_by).font(theme::reg(13.0)).color(p.muted));
+                let names = [(SortMode::Manual, t.sort_manual), (SortMode::Deadline, t.sort_deadline), (SortMode::Priority, t.sort_priority), (SortMode::Created, t.sort_created)];
+                let cur = names.iter().find(|n| n.0 == s).map(|n| n.1).unwrap_or("");
+                widgets::combo("sort", cur, 130.0).show_ui(ui, |ui| {
+                    for (m, n) in names {
+                        if ui.selectable_label(s == m, RichText::new(n).font(theme::reg(13.5))).clicked() {
+                            s = m;
+                        }
                     }
+                });
+                if s != self.cfg.sort {
+                    self.cfg.sort = s;
+                    self.touch_cfg(&ctx);
                 }
             });
-            if s != self.cfg.sort {
-                self.cfg.sort = s;
-                self.touch_cfg(&ctx);
+            self.hide_done_toggle(ui, p, false);
+            if self.filter.status.iter().any(|b| *b) || self.filter.priority.iter().any(|b| *b) || self.filter.deadline.iter().any(|b| *b) || !self.filter.text.is_empty() {
+                if widgets::btn(ui, t.clear_filters, Btn::Link, p).clicked() {
+                    self.filter = Default::default();
+                }
             }
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                self.hide_done_toggle(ui, p, false);
-                if self.filter.status.iter().any(|b| *b) || self.filter.priority.iter().any(|b| *b) || self.filter.deadline.iter().any(|b| *b) || !self.filter.text.is_empty() {
-                    if widgets::btn(ui, t.clear_filters, Btn::Link, p).clicked() {
-                        self.filter = Default::default();
-                    }
-                }
-            });
         });
     }
 

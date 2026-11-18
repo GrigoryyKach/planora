@@ -31,7 +31,7 @@ impl TimeField {
         let bad = !self.buf.trim().is_empty() && fmt::parse_time(&self.buf).is_none();
         let hint = if h24 { "HH:MM" } else { "h:MM AM" };
         let resp = ui.add(
-            egui::TextEdit::singleline(&mut self.buf).hint_text(hint).desired_width(80.0).margin(egui::Margin::symmetric(9, 6)).font(theme::reg(13.5)),
+            egui::TextEdit::singleline(&mut self.buf).hint_text(hint).desired_width(80.0).margin(egui::Margin::symmetric(9, 6)).align(egui::Align2::LEFT_CENTER).font(theme::reg(13.5)),
         );
         if bad {
             ui.painter().rect_stroke(resp.rect, 5.0, Stroke::new(1.5, widgets::RED), StrokeKind::Outside);
@@ -357,6 +357,7 @@ impl App {
                     ui.add(
                         egui::TextEdit::singleline(&mut c.text)
                             .desired_width(w - 80.0)
+                            .align(egui::Align2::LEFT_CENTER)
                             .frame(egui::Frame::NONE)
                             .text_color(col)
                             .font(theme::reg(14.0)),
@@ -437,7 +438,16 @@ fn add_row(ui: &mut Ui, p: &Pal, width: f32, hint: &str, add_label: &str, text: 
     let mut add = false;
     ui.push_id(id, |ui| {
         ui.horizontal(|ui| {
-            let r = widgets::input(ui, text, hint, (width - btn_w - 12.0).max(60.0));
+            // A stable id: rows are inserted above this input when an item is added, which would shift
+            // an automatic id and send the restored focus to the wrong field.
+            let r = ui.add(
+                egui::TextEdit::singleline(text)
+                    .id_salt((id, "input"))
+                    .hint_text(hint)
+                    .desired_width((width - btn_w - 12.0).max(60.0))
+                    .margin(egui::Margin::symmetric(11, 8))
+                    .font(theme::reg(14.0)),
+            );
             let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
             let click = widgets::btn_enabled(ui, add_label, Btn::Soft, !text.trim().is_empty(), p).clicked();
             if (enter || click) && !text.trim().is_empty() {

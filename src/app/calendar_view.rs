@@ -111,14 +111,17 @@ impl App {
 
     pub(super) fn hide_done_toggle(&mut self, ui: &mut Ui, p: &Pal, narrow: bool) {
         let ctx = ui.ctx().clone();
-        let mut hide = self.cfg.hide_done;
-        if theme::switch(ui, &mut hide, p).on_hover_text(self.s().hide_done).changed() {
-            self.cfg.hide_done = hide;
-            self.touch_cfg(&ctx);
-        }
-        if !narrow {
-            ui.label(RichText::new(self.s().hide_done).font(theme::reg(13.0)).color(p.muted));
-        }
+        // Label and switch form one block, so a wrapping row never separates them.
+        ui.horizontal(|ui| {
+            if !narrow {
+                ui.add(egui::Label::new(RichText::new(self.s().hide_done).font(theme::reg(13.0)).color(p.muted)).wrap_mode(egui::TextWrapMode::Extend));
+            }
+            let mut hide = self.cfg.hide_done;
+            if theme::switch(ui, &mut hide, p).on_hover_text(self.s().hide_done).changed() {
+                self.cfg.hide_done = hide;
+                self.touch_cfg(&ctx);
+            }
+        });
     }
 
     pub(super) fn calendar_view(&mut self, ui: &mut Ui, p: &Pal) {

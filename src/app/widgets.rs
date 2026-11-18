@@ -319,7 +319,7 @@ fn chevron(ui: &Ui, rect: Rect, color: Color32) {
 }
 
 /// Pixels to move the chevron so it looks level with the text (Segoe UI sits a little above the line box centre).
-const CHEVRON_NUDGE: f32 = -0.5;
+const CHEVRON_NUDGE: f32 = 0.5;
 
 /// A dropdown button in the suite style: text on the left, a chevron centred on the same row.
 pub fn combo(id: &str, text: &str, width: f32) -> egui::ComboBox<'static> {
