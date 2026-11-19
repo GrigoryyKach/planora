@@ -69,7 +69,7 @@ strings! {
         no_tasks: "No tasks here", "Здесь пока нет задач", "Тут поки немає завдань";
         no_tasks_hint: "Type a title above and press Enter", "Введите название выше и нажмите Enter", "Введіть назву вище й натисніть Enter";
         add_task_hint: "Add a task", "Добавить задачу", "Додати завдання";
-        filter_hint: "Search", "Поиск", "Пошук";
+        filter_hint: "Search…", "Поиск…", "Пошук…";
         clear_filters: "Clear filters", "Сбросить фильтры", "Скинути фільтри";
         sort_by: "Sort", "Порядок", "Порядок";
         sort_manual: "Manual", "Вручную", "Вручну";
