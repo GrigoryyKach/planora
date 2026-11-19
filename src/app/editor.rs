@@ -27,14 +27,14 @@ impl TimeField {
         }
     }
 
-    fn show(&mut self, ui: &mut Ui, value: &mut Option<NaiveTime>, h24: bool) {
+    fn show(&mut self, ui: &mut Ui, value: &mut Option<NaiveTime>, h24: bool, p: &Pal) {
         let bad = !self.buf.trim().is_empty() && fmt::parse_time(&self.buf).is_none();
         let hint = if h24 { "HH:MM" } else { "h:MM AM" };
         let resp = ui.add(
-            egui::TextEdit::singleline(&mut self.buf).hint_text(hint).desired_width(80.0).margin(egui::Margin::symmetric(9, 6)).align(egui::Align2::LEFT_CENTER).font(theme::reg(13.5)),
+            egui::TextEdit::singleline(&mut self.buf).hint_text(hint).desired_width(80.0).margin(egui::Margin::symmetric(10, 8)).align(egui::Align2::LEFT_CENTER).font(theme::mono(13.0)),
         );
         if bad {
-            ui.painter().rect_stroke(resp.rect, 5.0, Stroke::new(1.5, widgets::RED), StrokeKind::Outside);
+            ui.painter().rect_stroke(resp.rect, 8.0, Stroke::new(1.5, p.negative), StrokeKind::Outside);
         }
         if resp.changed() {
             if self.buf.trim().is_empty() {
@@ -127,7 +127,7 @@ impl App {
         ed.dl.sync(task.deadline_time, h24);
 
         ui.horizontal(|ui| {
-            theme::caps(ui, t.task, p);
+            theme::section(ui, t.task, p);
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 if widgets::icon_button(ui, Icon::Close, 30.0, p).on_hover_text(format!("{} (Esc)", t.close)).clicked() {
                     close = true;
@@ -137,7 +137,7 @@ impl App {
                 }
             });
         });
-        ui.add_space(6.0);
+        ui.add_space(8.0);
 
         ScrollArea::vertical().id_salt(ed.id.clone()).auto_shrink([false, false]).show(ui, |ui| {
             ui.set_width(ui.available_width() - 6.0);
@@ -149,7 +149,7 @@ impl App {
                     .hint_text(t.title_hint)
                     .desired_width(w)
                     .margin(egui::Margin::symmetric(12, 10))
-                    .font(theme::semi(16.0)),
+                    .font(theme::medium(16.0)),
             );
             if ed.focus_title && task.title.is_empty() {
                 r.request_focus();
@@ -182,17 +182,17 @@ impl App {
             });
 
             // Status and priority.
-            ui.add_space(12.0);
-            theme::caps(ui, t.status_label, p);
-            ui.add_space(2.0);
+            ui.add_space(20.0);
+            theme::section(ui, t.status_label, p);
+            ui.add_space(4.0);
             let labels: Vec<&str> = Status::ALL.iter().map(|s| status_name(t, Some(*s))).collect();
             let sel = task.status.and_then(|s| Status::ALL.iter().position(|x| *x == s));
             if let Some(n) = widgets::pills(ui, "ed-status", &labels, &[], sel, true, p) {
                 crate::model::calendar::set_status(&mut task, n.map(|i| Status::ALL[i]), self.now);
             }
             ui.add_space(8.0);
-            theme::caps(ui, t.priority_label, p);
-            ui.add_space(2.0);
+            theme::section(ui, t.priority_label, p);
+            ui.add_space(4.0);
             let labels = [t.prio_low, t.prio_medium, t.prio_high, t.prio_urgent];
             let colors: Vec<Option<Color32>> = Priority::ALL.iter().map(|x| Some(widgets::priority_color(*x))).collect();
             let sel = task.priority.and_then(|s| Priority::ALL.iter().position(|x| *x == s));
@@ -201,27 +201,35 @@ impl App {
             }
 
             // Dates.
-            ui.add_space(12.0);
-            theme::caps(ui, t.when, p);
-            ui.add_space(2.0);
+            ui.add_space(20.0);
+            theme::section(ui, t.when, p);
+            ui.add_space(4.0);
             self.date_row(ui, p, t.scheduled_label, &mut task.scheduled, DateTarget::Scheduled(task.id.clone()), |ui| {
-                ed.plan.show(ui, &mut task.time, h24);
+                ed.plan.show(ui, &mut task.time, h24, p);
             });
             self.date_row(ui, p, t.deadline_label, &mut task.deadline, DateTarget::Deadline(task.id.clone()), |ui| {
-                ed.dl.show(ui, &mut task.deadline_time, h24);
+                ed.dl.show(ui, &mut task.deadline_time, h24, p);
             });
 
             // Recurrence.
             if task.anchor().is_some() {
-                ui.add_space(10.0);
-                theme::caps(ui, t.repeat, p);
-                ui.add_space(2.0);
+                ui.add_space(20.0);
+                theme::section(ui, t.repeat, p);
+                ui.add_space(4.0);
                 let labels = [t.rec_none, t.rec_daily, t.rec_weekdays, t.rec_weekly, t.rec_monthly, t.rec_days];
                 let sel = match task.recurrence {
                     None => 0,
                     Some(r) => 1 + RecKind::ALL.iter().position(|k| *k == r.kind).unwrap_or(0),
                 };
-                if let Some(Some(i)) = widgets::pills(ui, "ed-rec", &labels, &[], Some(sel), false, p) {
+                let mut picked = None;
+                widgets::combo("ed-rec", labels[sel], ui.available_width()).show_ui(ui, |ui| {
+                    for (i, l) in labels.iter().enumerate() {
+                        if ui.selectable_label(sel == i, RichText::new(*l).font(theme::reg(14.0))).clicked() {
+                            picked = Some(i);
+                        }
+                    }
+                });
+                if let Some(i) = picked {
                     task.recurrence = if i == 0 {
                         None
                     } else {
@@ -232,11 +240,11 @@ impl App {
                 if let Some(mut rec) = task.recurrence {
                     if rec.kind == RecKind::Days {
                         ui.horizontal(|ui| {
-                            ui.label(RichText::new(t.every).font(theme::reg(13.5)).color(p.text));
+                            ui.label(RichText::new(t.every).font(theme::reg(14.0)).color(p.text));
                             let mut n = rec.interval as i32;
                             ui.add(egui::DragValue::new(&mut n).range(1..=365).speed(0.2));
                             rec.interval = n.max(1) as u32;
-                            ui.label(RichText::new(t.days_word).font(theme::reg(13.5)).color(p.text));
+                            ui.label(RichText::new(t.days_word).font(theme::reg(14.0)).color(p.text));
                         });
                     }
                     self.date_row(ui, p, t.until, &mut rec.until, DateTarget::Until(task.id.clone()), |_| {});
@@ -247,44 +255,35 @@ impl App {
 
             // Reminder.
             if (task.time.is_some() && task.scheduled.is_some()) || (task.deadline_time.is_some() && task.deadline.is_some()) {
-                ui.add_space(10.0);
-                theme::caps(ui, t.reminder, p);
-                ui.add_space(2.0);
+                ui.add_space(20.0);
+                theme::section(ui, t.reminder, p);
+                ui.add_space(4.0);
                 let def = t.remind_default.replace("{n}", &self.cfg.default_remind.to_string());
-                let labels = [def.as_str(), t.remind_off, t.remind_at, "5", "10", "15", "30"];
-                let mins = ["5", "10", "15", "30"];
-                let label_texts: Vec<String> = labels
-                    .iter()
-                    .map(|l| if mins.contains(l) { t.remind_min.replace("{n}", l) } else { l.to_string() })
-                    .collect();
-                let refs: Vec<&str> = label_texts.iter().map(|s| s.as_str()).collect();
-                let sel = match task.remind {
-                    Remind::Default => 0,
-                    Remind::Off => 1,
-                    Remind::Min(0) => 2,
-                    Remind::Min(5) => 3,
-                    Remind::Min(10) => 4,
-                    Remind::Min(15) => 5,
-                    Remind::Min(30) => 6,
-                    Remind::Min(_) => 99,
+                let mins = [5u32, 10, 15, 30];
+                let min_label = |m: u32| t.remind_min.replace("{n}", &m.to_string());
+                let mut options: Vec<(Remind, String)> = vec![(Remind::Default, def), (Remind::Off, t.remind_off.to_string()), (Remind::Min(0), t.remind_at.to_string())];
+                options.extend(mins.iter().map(|m| (Remind::Min(*m), min_label(*m))));
+                let current = match task.remind {
+                    Remind::Min(m) if !mins.contains(&m) && m != 0 => min_label(m),
+                    r => options.iter().find(|o| o.0 == r).map(|o| o.1.clone()).unwrap_or_default(),
                 };
-                if let Some(Some(i)) = widgets::pills(ui, "ed-remind", &refs, &[], Some(sel), false, p) {
-                    task.remind = match i {
-                        0 => Remind::Default,
-                        1 => Remind::Off,
-                        2 => Remind::Min(0),
-                        3 => Remind::Min(5),
-                        4 => Remind::Min(10),
-                        5 => Remind::Min(15),
-                        _ => Remind::Min(30),
-                    };
+                let mut picked = None;
+                widgets::combo("ed-remind", &current, ui.available_width()).show_ui(ui, |ui| {
+                    for (value, label) in &options {
+                        if ui.selectable_label(task.remind == *value, RichText::new(label).font(theme::reg(14.0))).clicked() {
+                            picked = Some(*value);
+                        }
+                    }
+                });
+                if let Some(v) = picked {
+                    task.remind = v;
                 }
             }
 
             // Description.
-            ui.add_space(12.0);
-            theme::caps(ui, t.description, p);
-            ui.add_space(2.0);
+            ui.add_space(20.0);
+            theme::section(ui, t.description, p);
+            ui.add_space(4.0);
             ui.add(
                 egui::TextEdit::multiline(&mut task.description)
                     .hint_text(t.description_hint)
@@ -295,16 +294,16 @@ impl App {
             );
 
             // Links.
-            ui.add_space(12.0);
-            theme::caps(ui, t.links, p);
-            ui.add_space(2.0);
+            ui.add_space(20.0);
+            theme::section(ui, t.links, p);
+            ui.add_space(4.0);
             let mut remove_link = None;
             for (i, l) in task.links.iter_mut().enumerate() {
                 let bad = !l.url.trim().is_empty() && !valid_url(&l.url);
                 ui.horizontal(|ui| {
                     let r = widgets::input(ui, &mut l.url, "https://", (w - 150.0).max(80.0));
                     if bad {
-                        ui.painter().rect_stroke(r.rect, 5.0, Stroke::new(1.5, widgets::RED), StrokeKind::Outside);
+                        ui.painter().rect_stroke(r.rect, 8.0, Stroke::new(1.5, p.negative), StrokeKind::Outside);
                         r.on_hover_text(t.bad_url);
                     }
                     if !bad && !l.url.trim().is_empty() {
@@ -330,12 +329,12 @@ impl App {
             }
 
             // Checklist.
-            ui.add_space(12.0);
+            ui.add_space(20.0);
             let (cd, ct) = task.progress();
             ui.horizontal(|ui| {
-                theme::caps(ui, t.checklist, p);
+                theme::section(ui, t.checklist, p);
                 if ct > 0 {
-                    ui.label(RichText::new(format!("{cd}/{ct}")).font(theme::semi(12.0)).color(p.muted));
+                    theme::meta(ui, &format!("{cd}/{ct}"), p);
                 }
             });
             ui.add_space(2.0);
@@ -343,13 +342,8 @@ impl App {
             for (i, c) in task.checklist.iter_mut().enumerate() {
                 ui.horizontal(|ui| {
                     let (r, resp) = ui.allocate_exact_size(vec2(22.0, 22.0), Sense::click());
-                    let box_r = egui::Rect::from_center_size(r.center(), vec2(17.0, 17.0));
-                    if c.done {
-                        ui.painter().rect_filled(box_r, 5.0, p.accent);
-                        widgets::icon(ui.painter(), Icon::Check, box_r.center(), 12.0, Color32::WHITE);
-                    } else {
-                        ui.painter().rect_stroke(box_r, 5.0, Stroke::new(1.5, p.muted), StrokeKind::Inside);
-                    }
+                    let box_r = egui::Rect::from_center_size(r.center(), vec2(16.0, 16.0));
+                    widgets::check_box(ui.painter(), box_r, c.done, p);
                     if resp.on_hover_cursor(CursorIcon::PointingHand).clicked() {
                         c.done = !c.done;
                     }
@@ -374,7 +368,7 @@ impl App {
                 commit_check(&mut task.checklist, &mut ed.new_check);
             }
 
-            ui.add_space(16.0);
+            ui.add_space(24.0);
             theme::hint(
                 ui,
                 &t.created_updated
@@ -410,12 +404,12 @@ impl App {
         // The salt keeps the two rows' widgets apart even though their labels and buttons look alike.
         ui.push_id(label, |ui| {
             ui.horizontal(|ui| {
-                ui.add_sized(vec2(84.0, 28.0), egui::Label::new(RichText::new(label).font(theme::reg(13.5)).color(p.muted)));
+                ui.add_sized(vec2(84.0, 28.0), egui::Label::new(RichText::new(label).font(theme::reg(14.0)).color(p.text2)));
                 let text = match value {
                     Some(d) => fmt::date_full(self.lang, *d),
                     None => t.set_date.to_string(),
                 };
-                let resp = widgets::btn(ui, &text, if value.is_some() { Btn::Soft } else { Btn::Ghost }, p);
+                let resp = widgets::btn(ui, &text, Btn::Secondary, p);
                 if resp.clicked() {
                     self.open_picker(target.clone(), below(resp.rect), *value);
                 }
@@ -434,7 +428,7 @@ impl App {
 /// An "input + Add" row that fits the panel width. Returns `true` when the user asked to add: Add was clicked
 /// or Enter was pressed with non-empty text. The input keeps (or regains) focus afterwards.
 fn add_row(ui: &mut Ui, p: &Pal, width: f32, hint: &str, add_label: &str, text: &mut String, id: &str) -> bool {
-    let btn_w = ui.painter().layout_no_wrap(add_label.to_string(), theme::semi(13.5), p.text).size().x + 28.0;
+    let btn_w = ui.painter().layout_no_wrap(add_label.to_string(), theme::medium(14.0), p.text).size().x + 24.0;
     let mut add = false;
     ui.push_id(id, |ui| {
         ui.horizontal(|ui| {
@@ -445,11 +439,11 @@ fn add_row(ui: &mut Ui, p: &Pal, width: f32, hint: &str, add_label: &str, text: 
                     .id_salt((id, "input"))
                     .hint_text(hint)
                     .desired_width((width - btn_w - 12.0).max(60.0))
-                    .margin(egui::Margin::symmetric(11, 8))
+                    .margin(egui::Margin::symmetric(12, 8))
                     .font(theme::reg(14.0)),
             );
             let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-            let click = widgets::btn_enabled(ui, add_label, Btn::Soft, !text.trim().is_empty(), p).clicked();
+            let click = widgets::btn_enabled(ui, add_label, Btn::Secondary, !text.trim().is_empty(), p).clicked();
             if (enter || click) && !text.trim().is_empty() {
                 add = true;
                 r.request_focus();

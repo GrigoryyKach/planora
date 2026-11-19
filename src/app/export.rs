@@ -88,9 +88,9 @@ impl App {
         let t = self.s();
         let mut close = false;
         let backdrop = super::dialogs::modal(ctx, p, "pdf-saved", 480.0, |ui: &mut Ui| {
-            ui.label(RichText::new(t.pdf_saved).font(theme::bold(18.0)).color(p.text));
+            ui.label(RichText::new(t.pdf_saved).font(theme::medium(18.0)).color(p.text));
             ui.add_space(4.0);
-            ui.add(egui::Label::new(RichText::new(path.display().to_string()).font(theme::reg(12.5)).color(p.muted)).wrap());
+            ui.add(egui::Label::new(RichText::new(path.display().to_string()).font(theme::mono(12.0)).color(p.muted)).wrap());
             ui.add_space(14.0);
             let f = super::dialogs::footer(ui, self, p, None, &[t.close, t.show_in_folder], t.open, true);
             if f.primary {

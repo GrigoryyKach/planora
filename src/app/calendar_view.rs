@@ -13,7 +13,7 @@ use eframe::egui::{
 };
 use std::sync::Arc;
 
-const CHIP_H: f32 = 19.0;
+const CHIP_H: f32 = 20.0;
 const CHIP_GAP: f32 = 2.0;
 
 /// Single-row galley cut to `max_width` with an ellipsis.
@@ -38,33 +38,26 @@ pub fn paint_chip(
     p: &Pal,
 ) {
     let painter = ui.painter();
-    let base = theme::mix(p.card, profile_color, if p.dark { 0.20 } else { 0.14 });
-    let fill = if hovered { theme::mix(base, profile_color, 0.12) } else { base };
-    painter.rect_filled(rect, 5.0, fill);
-    painter.rect_filled(Rect::from_min_size(rect.min, vec2(3.0, rect.height())), 2.0, profile_color);
-    let mut x = rect.left() + 8.0;
+    // A neutral chip with a stripe in the project colour: the colour says which project, nothing else.
+    painter.rect_filled(rect, 4.0, if hovered { p.raised_hi } else { p.raised });
+    painter.rect_filled(Rect::from_min_size(rect.min, vec2(3.0, rect.height())), egui::CornerRadius { nw: 4, sw: 4, ne: 0, se: 0 }, profile_color);
+    let mut x = rect.left() + 9.0;
     let cy = rect.center().y;
-    // Closed (done or cancelled) and past plan dates are muted; only an overdue deadline is red.
-    let col = if item.done || item.past {
-        p.muted
-    } else if item.overdue {
-        widgets::RED
-    } else {
-        p.text
-    };
+    // Closed (done or cancelled) and past plan dates are muted; only an overdue deadline carries the red flag.
+    let col = if item.done || item.past { p.muted } else { p.text };
     if cancelled {
-        widgets::icon(painter, Icon::Close, pos2(x + 4.0, cy), 10.0, widgets::RED);
-        x += 13.0;
+        widgets::icon(painter, Icon::Close, pos2(x + 4.0, cy), 10.0, p.negative);
+        x += 14.0;
     }
     if item.kind == ItemKind::Deadline {
-        widgets::icon(painter, Icon::Flag, pos2(x + 4.0, cy), 11.0, if item.overdue && !item.done { widgets::RED } else { p.muted });
-        x += 13.0;
+        widgets::icon(painter, Icon::Flag, pos2(x + 4.0, cy), 11.0, if item.overdue && !item.done { p.negative } else { p.muted });
+        x += 14.0;
     }
     if let Some(tt) = time_text {
-        let g = painter.layout_no_wrap(tt.to_string(), theme::semi(11.0), if item.done { p.muted } else { p.muted });
+        let g = painter.layout_no_wrap(tt.to_string(), theme::mono(11.0), p.muted);
         let w = g.size().x;
         painter.galley(pos2(x, cy - g.size().y / 2.0), g, p.muted);
-        x += w + 5.0;
+        x += w + 6.0;
     }
     let strike = item.done.then(|| Stroke::new(1.0, p.muted));
     let g = fit_text(painter, title, theme::reg(12.0), col, rect.right() - x - 5.0, strike);
@@ -78,13 +71,13 @@ impl App {
         let t = self.s();
         // With the editor open there is little room: the button shrinks to "+" and labels go.
         let narrow = ui.available_width() < 560.0;
-        let rect = ui.allocate_exact_size(vec2(if narrow { 38.0 } else { 132.0 }, 36.0), Sense::hover()).0;
+        let rect = ui.allocate_exact_size(vec2(if narrow { 36.0 } else { 128.0 }, Btn::Primary.height()), Sense::hover()).0;
         let label = if narrow { "+" } else { t.new_task };
-        if theme::gradient_button(ui, rect, ui.scope_id().with("new-task"), label, None, true, &self.tex, p).on_hover_text(format!("{} (Ctrl+N)", t.new_task)).clicked() {
+        if theme::button_at(ui, rect, ui.scope_id().with("new-task"), label, Btn::Primary, p).on_hover_text(format!("{} (Ctrl+N)", t.new_task)).clicked() {
             self.open_quick_add(None);
         }
         if let Some(target) = export {
-            if widgets::btn(ui, t.export_pdf, Btn::Ghost, p).clicked() {
+            if widgets::btn(ui, t.export_pdf, Btn::Secondary, p).clicked() {
                 self.export_pdf(&ctx, target);
             }
         }
@@ -114,10 +107,10 @@ impl App {
         let label = self.s().hide_done;
         // Label and switch form one block of known width, so a wrapping row moves them together
         // instead of overflowing or splitting them.
-        let lw = if narrow { 0.0 } else { ui.painter().layout_no_wrap(label.to_string(), theme::reg(13.0), p.muted).size().x + 8.0 };
-        ui.allocate_ui_with_layout(vec2(lw + 42.0, super::ROW_H), Layout::left_to_right(Align::Center), |ui| {
+        let lw = if narrow { 0.0 } else { ui.painter().layout_no_wrap(label.to_string(), theme::reg(13.0), p.text2).size().x + 8.0 };
+        ui.allocate_ui_with_layout(vec2(lw + 40.0, super::ROW_H), Layout::left_to_right(Align::Center), |ui| {
             if !narrow {
-                ui.add(egui::Label::new(RichText::new(label).font(theme::reg(13.0)).color(p.muted)).wrap_mode(egui::TextWrapMode::Extend));
+                ui.add(egui::Label::new(RichText::new(label).font(theme::reg(13.0)).color(p.text2)).wrap_mode(egui::TextWrapMode::Extend));
             }
             let mut hide = self.cfg.hide_done;
             if theme::switch(ui, &mut hide, p).on_hover_text(label).changed() {
@@ -132,12 +125,12 @@ impl App {
         let t = self.s();
         let (year, month) = self.cal;
         ui.horizontal(|ui| {
-            ui.label(RichText::new(fmt::month_title(self.lang, year, month)).font(theme::bold(24.0)).color(p.text));
+            ui.label(RichText::new(fmt::month_title(self.lang, year, month)).font(theme::medium(24.0)).color(p.text));
             ui.add_space(8.0);
             if widgets::icon_button(ui, Icon::Left, 32.0, p).on_hover_text(format!("{} (PgUp)", t.prev_month)).clicked() {
                 self.cal = calendar::shift_month(year, month, -1);
             }
-            if widgets::btn(ui, t.today_btn, Btn::Ghost, p).clicked() {
+            if widgets::btn(ui, t.today_btn, Btn::Secondary, p).clicked() {
                 self.cal = (self.today.year(), self.today.month());
             }
             if widgets::icon_button(ui, Icon::Right, 32.0, p).on_hover_text(format!("{} (PgDn)", t.next_month)).clicked() {
@@ -145,31 +138,25 @@ impl App {
             }
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| self.header_right(ui, p, true, None));
         });
-        ui.add_space(10.0);
+        ui.add_space(16.0);
 
         let (year, month) = self.cal;
         let grid = calendar::month_grid(year, month, self.week_start());
         let items = items_in_range(&self.data.tasks, grid[0], grid[41], self.cfg.filter, self.cfg.hide_done, self.now);
 
-        // Weekday header.
+        // Weekday header: quiet labels, weekends are not tinted.
         let area = ui.available_rect_before_wrap();
-        let gap = 6.0;
-        let cell_w = (area.width() - gap * 6.0) / 7.0;
-        let head_h = 22.0;
+        let head_h = 24.0;
+        let cell_w = area.width() / 7.0;
         for (i, wd) in calendar::weekday_order(self.week_start()).iter().enumerate() {
-            let x = area.left() + i as f32 * (cell_w + gap);
-            let weekend = matches!(wd, chrono::Weekday::Sat | chrono::Weekday::Sun);
-            ui.painter().text(
-                pos2(x + cell_w / 2.0, area.top() + head_h / 2.0),
-                Align2::CENTER_CENTER,
-                fmt::weekday_short(self.lang, *wd),
-                theme::semi(12.0),
-                if weekend { p.accent2 } else { p.muted },
-            );
+            let x = area.left() + i as f32 * cell_w;
+            ui.painter().text(pos2(x + cell_w / 2.0, area.top() + head_h / 2.0), Align2::CENTER_CENTER, fmt::weekday_short(self.lang, *wd), theme::medium(12.0), p.muted);
         }
+        // The month is one ruled board (a wall planner), not 42 tiles: a card with hairlines between the days.
         let grid_top = area.top() + head_h + 4.0;
-        let cell_h = ((area.bottom() - grid_top - gap * 5.0) / 6.0).max(76.0);
-        ui.allocate_rect(Rect::from_min_max(area.min, pos2(area.right(), grid_top + 6.0 * cell_h + 5.0 * gap)), Sense::hover());
+        let cell_h = ((area.bottom() - grid_top) / 6.0).max(76.0);
+        let board = Rect::from_min_max(pos2(area.left(), grid_top), pos2(area.right(), grid_top + 6.0 * cell_h));
+        ui.allocate_rect(Rect::from_min_max(area.min, pos2(area.right(), board.bottom())), Sense::hover());
 
         let pointer = ctx.input(|i| i.pointer.latest_pos());
         let mut hover_cell: Option<NaiveDate> = None;
@@ -178,68 +165,83 @@ impl App {
         let mut start_drag: Option<Drag> = None;
         let dragging = self.drag.is_some();
 
-        for (idx, day) in grid.iter().enumerate() {
+        let cell_rect = |idx: usize| {
             let (row, col) = (idx / 7, idx % 7);
-            let rect = Rect::from_min_size(
-                pos2(area.left() + col as f32 * (cell_w + gap), grid_top + row as f32 * (cell_h + gap)),
-                vec2(cell_w, cell_h),
-            );
-            let in_month = day.month() == month;
-            let is_today = *day == self.today;
-            let weekend = matches!(day.weekday(), chrono::Weekday::Sat | chrono::Weekday::Sun);
-            if pointer.is_some_and(|pp| rect.expand(gap / 2.0).contains(pp)) {
+            Rect::from_min_size(pos2(area.left() + col as f32 * cell_w, grid_top + row as f32 * cell_h), vec2(cell_w, cell_h))
+        };
+        for (idx, day) in grid.iter().enumerate() {
+            if pointer.is_some_and(|pp| cell_rect(idx).contains(pp)) {
                 hover_cell = Some(*day);
             }
-            let cell_resp = ui.interact(rect, ui.scope_id().with(("cell", idx)), Sense::click());
-            let mut fill = if weekend { theme::mix(p.card, p.accent2, 0.05) } else { p.card };
-            if !in_month {
-                fill = theme::mix(fill, p.bg, 0.55);
-            }
-            if cell_resp.hovered() && !dragging {
-                fill = theme::mix(fill, p.accent, 0.06);
-            }
-            let is_drop = dragging && hover_cell == Some(*day);
-            let stroke = if is_drop {
-                Stroke::new(2.0, p.accent)
-            } else if is_today {
-                Stroke::new(1.5, p.accent)
-            } else {
-                Stroke::new(1.0, p.line)
+        }
+        // Surfaces first, then the hairlines on top of them, then each day's content.
+        let r = theme::R_CARD - 1;
+        ui.painter().rect_filled(board, theme::R_CARD as f32, p.card);
+        for (idx, day) in grid.iter().enumerate() {
+            let rect = cell_rect(idx);
+            let corners = egui::CornerRadius {
+                nw: if idx == 0 { r } else { 0 },
+                ne: if idx == 6 { r } else { 0 },
+                sw: if idx == 35 { r } else { 0 },
+                se: if idx == 41 { r } else { 0 },
             };
-            ui.painter().rect(rect, 10.0, fill, stroke, StrokeKind::Inside);
+            let in_month = day.month() == month;
+            if !in_month {
+                ui.painter().rect_filled(rect.shrink(1.0), corners, p.bg);
+            }
+            if hover_cell == Some(*day) && !dragging {
+                ui.painter().rect_filled(rect.shrink(1.0), corners, theme::alpha(p.raised, if in_month { 140 } else { 200 }));
+            }
+        }
+        for c in 1..7 {
+            let x = area.left() + c as f32 * cell_w;
+            ui.painter().vline(x, board.y_range(), Stroke::new(1.0, p.line));
+        }
+        for rr in 1..6 {
+            let y = grid_top + rr as f32 * cell_h;
+            ui.painter().hline(board.x_range(), y, Stroke::new(1.0, p.line));
+        }
+        ui.painter().rect_stroke(board, theme::R_CARD as f32, Stroke::new(1.0, p.line), StrokeKind::Inside);
+
+        for (idx, day) in grid.iter().enumerate() {
+            let rect = cell_rect(idx);
+            let in_month = day.month() == month;
+            let is_today = *day == self.today;
+            let cell_resp = ui.interact(rect, ui.scope_id().with(("cell", idx)), Sense::click());
+            if dragging && hover_cell == Some(*day) {
+                ui.painter().rect_stroke(rect.shrink(1.0), 2.0, Stroke::new(2.0, p.accent), StrokeKind::Inside);
+            }
             if cell_resp.clicked() {
                 open_day = Some(*day);
             }
 
-            // Day number.
-            let num_pos = pos2(rect.left() + 10.0, rect.top() + 14.0);
+            // Day number; today is an accent ring, like a stamp on a desk calendar.
+            let num_c = pos2(rect.left() + 18.0, rect.top() + 16.0);
             if is_today {
-                ui.painter().circle_filled(num_pos + vec2(5.0, 0.0), 11.0, p.accent);
-                ui.painter().text(num_pos + vec2(5.0, 0.0), Align2::CENTER_CENTER, day.day().to_string(), theme::bold(12.5), Color32::WHITE);
-            } else {
-                let c = if in_month { p.text } else { p.muted.gamma_multiply(0.6) };
-                ui.painter().text(num_pos + vec2(5.0, 0.0), Align2::CENTER_CENTER, day.day().to_string(), theme::semi(12.5), c);
+                ui.painter().circle_stroke(num_c, 11.0, Stroke::new(1.5, p.accent));
             }
+            let c = if is_today { p.text } else if in_month { p.text2 } else { p.muted };
+            ui.painter().text(num_c, Align2::CENTER_CENTER, day.day().to_string(), if is_today { theme::medium(12.0) } else { theme::mono(12.0) }, c);
 
             // Chips.
             let list: &[Item] = items.get(day).map(|v| v.as_slice()).unwrap_or(&[]);
             if list.is_empty() {
                 continue;
             }
-            let avail_h = rect.height() - 30.0 - 4.0;
+            let avail_h = rect.height() - 36.0 - 4.0;
             let max = ((avail_h + CHIP_GAP) / (CHIP_H + CHIP_GAP)).floor().max(1.0) as usize;
             let (shown, more) = if list.len() > max { (max.saturating_sub(1).max(1), list.len() - max.saturating_sub(1).max(1)) } else { (list.len(), 0) };
-            let mut y = rect.top() + 30.0;
+            let mut y = rect.top() + 36.0;
             for (k, item) in list.iter().take(shown).enumerate() {
                 let Some(task) = self.data.task(&item.task_id) else { continue };
-                let chip = Rect::from_min_size(pos2(rect.left() + 6.0, y), vec2(rect.width() - 12.0, CHIP_H));
+                let chip = Rect::from_min_size(pos2(rect.left() + 8.0, y), vec2(rect.width() - 16.0, CHIP_H));
                 y += CHIP_H + CHIP_GAP;
                 let resp = ui.interact(chip, ui.scope_id().with(("chip", idx, k)), Sense::click_and_drag());
                 let ttxt = item.time.map(|tt| fmt::time_text(tt, self.h24()));
                 let is_dragged = self.drag.as_ref().is_some_and(|d| d.task_id == item.task_id && d.kind == item.kind);
                 let pc = self.color_of(task.profile);
                 if is_dragged {
-                    ui.painter().rect_stroke(chip, 5.0, Stroke::new(1.0, p.line), StrokeKind::Inside);
+                    ui.painter().rect_stroke(chip, 4.0, Stroke::new(1.0, p.line_hi), StrokeKind::Inside);
                 } else {
                     paint_chip(ui, chip, item, &task.title, pc, ttxt.as_deref(), task.is_cancelled(), resp.hovered(), p);
                 }
@@ -261,10 +263,10 @@ impl App {
                 }
             }
             if more > 0 {
-                let r = Rect::from_min_size(pos2(rect.left() + 6.0, y), vec2(rect.width() - 12.0, CHIP_H));
+                let r = Rect::from_min_size(pos2(rect.left() + 8.0, y), vec2(rect.width() - 16.0, CHIP_H));
                 let resp = ui.interact(r, ui.scope_id().with(("more", idx)), Sense::click());
-                let col = if resp.hovered() { p.accent } else { p.muted };
-                ui.painter().text(pos2(r.left() + 6.0, r.center().y), Align2::LEFT_CENTER, t.more.replace("{n}", &more.to_string()), theme::semi(11.5), col);
+                let col = theme::mix(p.muted, p.text, theme::fade(ui, resp.id.with("hover"), resp.hovered()));
+                ui.painter().text(pos2(r.left() + 4.0, r.center().y), Align2::LEFT_CENTER, t.more.replace("{n}", &more.to_string()), theme::medium(12.0), col);
                 if resp.on_hover_cursor(CursorIcon::PointingHand).clicked() {
                     open_day = Some(*day);
                 }
@@ -315,8 +317,8 @@ impl App {
         let pc = self.color_of(task.profile);
         egui::Area::new(egui::Id::unique("drag-ghost")).order(Order::Tooltip).fixed_pos(pos + vec2(10.0, 6.0)).interactable(false).show(ctx, |ui| {
             let (rect, _) = ui.allocate_exact_size(vec2(160.0, CHIP_H + 2.0), Sense::hover());
-            ui.painter().rect_filled(rect.expand(1.0), 6.0, Color32::from_black_alpha(60));
-            ui.painter().rect_filled(rect, 5.0, p.card);
+            ui.painter().add(theme::shadow_for(p).as_shape(rect, 4.0));
+            ui.painter().rect(rect, 4.0, p.card, Stroke::new(1.0, p.line_hi), StrokeKind::Inside);
             paint_chip(ui, rect, &item, &title, pc, None, cancelled, true, p);
         });
     }

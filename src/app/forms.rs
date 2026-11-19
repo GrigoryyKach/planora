@@ -46,8 +46,8 @@ impl App {
         let mut pick: Option<Rect> = None;
         let mut date = date;
         let backdrop = modal(ctx, p, "quick-add", 440.0, |ui: &mut Ui| {
-            ui.label(RichText::new(t.new_task).font(theme::bold(18.0)).color(p.text));
-            ui.add_space(10.0);
+            ui.label(RichText::new(t.new_task).font(theme::medium(18.0)).color(p.text));
+            ui.add_space(16.0);
             let r = widgets::input(ui, &mut title, t.title_hint, ui.available_width());
             if focus {
                 r.request_focus();
@@ -80,9 +80,9 @@ impl App {
             });
             ui.add_space(8.0);
             ui.horizontal(|ui| {
-                ui.label(RichText::new(t.date_label).font(theme::reg(13.5)).color(p.muted));
+                ui.label(RichText::new(t.date_label).font(theme::reg(14.0)).color(p.text2));
                 let text = date.map(|d| fmt::date_full(self.lang, d)).unwrap_or_else(|| t.set_date.to_string());
-                let resp = widgets::btn(ui, &text, if date.is_some() { Btn::Soft } else { Btn::Ghost }, p);
+                let resp = widgets::btn(ui, &text, Btn::Secondary, p);
                 if resp.clicked() {
                     pick = Some(resp.rect);
                 }
@@ -90,7 +90,7 @@ impl App {
                     date = None;
                 }
             });
-            ui.add_space(14.0);
+            ui.add_space(24.0);
             let f = footer(ui, self, p, None, &[t.cancel], t.add, !title.trim().is_empty());
             submit |= f.primary;
             close |= f.secondary.is_some();
@@ -158,9 +158,7 @@ impl App {
                 ScrollArea::vertical().max_height(h).min_scrolled_height(h).auto_shrink([false, true]).show(ui, |ui| {
                     for task in &hits {
                         let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 40.0), Sense::click());
-                        if resp.hovered() {
-                            ui.painter().rect_filled(rect, 9.0, p.hover);
-                        }
+                        ui.painter().rect_filled(rect, theme::R_CONTROL as f32, theme::alpha(p.raised, (theme::fade(ui, resp.id.with("hover"), resp.hovered()) * 255.0) as u8));
                         widgets::status_mark(ui.painter(), pos2(rect.left() + 18.0, rect.center().y), task.status, task.is_closed(), p);
                         ui.painter().circle_filled(pos2(rect.right() - 14.0, rect.center().y), 4.0, self.color_of(task.profile));
                         let name = task.project_id.as_deref().and_then(|id| self.project_name(id)).unwrap_or("");
@@ -202,7 +200,7 @@ impl App {
         let (mut close, mut save, mut delete) = (false, false, false);
         let editing = f.id.is_some();
         let backdrop = modal(ctx, p, "project", 440.0, |ui: &mut Ui| {
-            ui.label(RichText::new(if editing { t.edit_project } else { t.new_project }).font(theme::bold(18.0)).color(p.text));
+            ui.label(RichText::new(if editing { t.edit_project } else { t.new_project }).font(theme::medium(18.0)).color(p.text));
             ui.add_space(10.0);
             if !editing {
                 let colors = [Some(self.color_of(Profile::Personal)), Some(self.color_of(Profile::Work))];
@@ -221,9 +219,9 @@ impl App {
             }
             ui.add_space(6.0);
             widgets::input(ui, &mut f.description, t.project_desc_hint, ui.available_width());
-            ui.add_space(10.0);
-            theme::caps(ui, t.color, p);
-            ui.add_space(2.0);
+            ui.add_space(20.0);
+            theme::section(ui, t.color, p);
+            ui.add_space(8.0);
             color_swatches(ui, &mut f.color, p);
             if editing {
                 ui.add_space(10.0);
@@ -232,7 +230,7 @@ impl App {
                     ui.label(RichText::new(t.archived_label).font(theme::reg(14.0)).color(p.text));
                 });
             }
-            ui.add_space(14.0);
+            ui.add_space(24.0);
             let out = footer(ui, self, p, editing.then_some(t.delete_project), &[t.cancel], t.save, !f.name.trim().is_empty());
             delete |= out.left;
             save |= out.primary;
@@ -278,7 +276,7 @@ impl App {
         let count = self.data.tasks.iter().filter(|x| x.project_id.as_deref() == Some(&id)).count();
         let (mut close, mut confirm) = (false, false);
         let backdrop = modal(ctx, p, "del-project", 440.0, |ui: &mut Ui| {
-            ui.label(RichText::new(t.delete_project_q.replace("{name}", &pr.name)).font(theme::bold(17.0)).color(p.text));
+            ui.label(RichText::new(t.delete_project_q.replace("{name}", &pr.name)).font(theme::medium(18.0)).color(p.text));
             ui.add_space(6.0);
             theme::hint(ui, &crate::i18n::plural(self.lang, count, &t.tasks_plural), p);
             if count > 0 {
@@ -290,7 +288,7 @@ impl App {
                     to_inbox = false;
                 }
             }
-            ui.add_space(14.0);
+            ui.add_space(24.0);
             let f = footer(ui, self, p, None, &[t.cancel], t.delete, true);
             confirm |= f.primary;
             close |= f.secondary.is_some();

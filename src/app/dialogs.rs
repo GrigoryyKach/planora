@@ -73,10 +73,10 @@ pub(super) fn modal(ctx: &egui::Context, p: &Pal, name: &str, width: f32, add: i
     egui::Area::new(id_of(name)).order(Order::Foreground).anchor(Align2::CENTER_CENTER, vec2(0.0, -10.0)).show(ctx, |ui| {
         Frame::new()
             .fill(p.card)
-            .stroke(Stroke::new(1.0, p.line))
-            .corner_radius(18)
-            .inner_margin(Margin::symmetric(24, 20))
-            .shadow(theme::shadow(16, 48, Color32::from_black_alpha(90)))
+            .stroke(Stroke::new(1.0, p.line_hi))
+            .corner_radius(theme::R_WINDOW)
+            .inner_margin(Margin::same(24))
+            .shadow(theme::shadow_for(p))
             .show(ui, |ui| {
                 ui.set_width(width);
                 add(ui);
@@ -94,33 +94,41 @@ pub(super) struct FooterOut {
     pub primary: bool,
 }
 
-/// The one footer every modal uses: all buttons are 38 px tall with the same minimum width, the accent
-/// button is rightmost, the secondary (ghost) buttons sit to its left, an optional ghost button sits at the far left.
-pub(super) fn footer(ui: &mut Ui, app: &App, p: &Pal, left: Option<&str>, secondary: &[&str], primary: &str, enabled: bool) -> FooterOut {
-    const H: f32 = 38.0;
+/// The one footer every modal uses: all buttons are 36 px tall with the same minimum width, the accent
+/// button is rightmost, the secondary buttons sit to its left, an optional secondary button sits at the far left.
+pub(super) fn footer(ui: &mut Ui, _app: &App, p: &Pal, left: Option<&str>, secondary: &[&str], primary: &str, enabled: bool) -> FooterOut {
+    const H: f32 = 36.0;
     const GAP: f32 = 8.0;
     let (row, _) = ui.allocate_exact_size(vec2(ui.available_width(), H), Sense::hover());
     let painter = ui.painter().clone();
-    let width = |label: &str| (painter.layout_no_wrap(label.to_string(), theme::semi(13.5), p.text).size().x + 44.0).max(112.0);
+    let width = |label: &str| (painter.layout_no_wrap(label.to_string(), theme::medium(14.0), p.text).size().x + 40.0).max(112.0);
     let mut out = FooterOut::default();
     let mut x = row.right();
     let w = width(primary);
     x -= w;
     let rect = Rect::from_min_size(egui::pos2(x, row.top()), vec2(w, H));
-    if theme::gradient_button(ui, rect, ui.scope_id().with(("footer-primary", primary)), primary, None, enabled, &app.tex, p).clicked() && enabled {
-        out.primary = true;
+    let id = ui.scope_id().with(("footer-primary", primary));
+    if enabled {
+        if theme::button_at(ui, rect, id, primary, theme::Btn::Primary, p).clicked() {
+            out.primary = true;
+        }
+    } else {
+        // Disabled: a flat outline with muted text, no hover and no click.
+        ui.interact(rect, id, Sense::hover());
+        painter.rect(rect, theme::R_CONTROL as f32, p.raised, Stroke::new(1.0, p.line), egui::StrokeKind::Inside);
+        painter.text(rect.center(), Align2::CENTER_CENTER, primary, theme::medium(14.0), p.muted);
     }
     for (i, label) in secondary.iter().enumerate().rev() {
         let w = width(label);
         x -= GAP + w;
         let rect = Rect::from_min_size(egui::pos2(x, row.top()), vec2(w, H));
-        if theme::button_at(ui, rect, ui.scope_id().with(("footer-secondary", i, *label)), label, theme::Btn::Ghost, p).clicked() {
+        if theme::button_at(ui, rect, ui.scope_id().with(("footer-secondary", i, *label)), label, theme::Btn::Secondary, p).clicked() {
             out.secondary = Some(i);
         }
     }
     if let Some(label) = left {
         let rect = Rect::from_min_size(row.min, vec2(width(label), H));
-        if theme::button_at(ui, rect, ui.scope_id().with(("footer-left", label)), label, theme::Btn::Ghost, p).clicked() {
+        if theme::button_at(ui, rect, ui.scope_id().with(("footer-left", label)), label, theme::Btn::Secondary, p).clicked() {
             out.left = true;
         }
     }
@@ -135,7 +143,7 @@ pub(super) fn color_swatches(ui: &mut Ui, color: &mut u32, p: &Pal) {
             let (r, resp) = ui.allocate_exact_size(vec2(26.0, 26.0), Sense::click());
             ui.painter().circle_filled(r.center(), 11.0, widgets::rgb(c));
             if *color == c {
-                ui.painter().circle_stroke(r.center(), 13.5, Stroke::new(2.0, p.text));
+                ui.painter().circle_stroke(r.center(), 13.0, Stroke::new(1.5, p.text));
                 widgets::icon(ui.painter(), Icon::Check, r.center(), 13.0, widgets::on_color(widgets::rgb(c)));
             }
             if resp.on_hover_cursor(CursorIcon::PointingHand).clicked() {

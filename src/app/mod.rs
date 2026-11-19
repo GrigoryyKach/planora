@@ -18,7 +18,7 @@ use crate::nimvoro::Updater;
 use crate::notify::{self, Worker};
 use crate::platform;
 use crate::strings::{self, S};
-use crate::theme::{self, Pal, Textures};
+use crate::theme::{self, Pal};
 use crate::tray::Tray;
 
 mod calendar_view;
@@ -42,6 +42,9 @@ const MIN_CENTRAL_W: f32 = 520.0;
 /// Minimum row height (see `App::new`).
 pub const ROW_H: f32 = 34.0;
 pub const ICON_PNG: &[u8] = include_bytes!("../../assets/icon.png");
+/// The app accent: teal, away from the blue and amber of the project colours. The light shade is dark enough to
+/// stay readable as text on the sidebar grey (see the contrast test below).
+pub const ACCENT: theme::Accent = theme::Accent::new(0x2ec4b6, 0x0c7a70, 0x141415, 0xffffff);
 /// Colours offered for projects and profiles.
 pub const PALETTE: [u32; 10] = [0x4f6bff, 0x8a5bff, 0xec4899, 0xef4444, 0xf59e0b, 0xeab308, 0x10b981, 0x06b6d4, 0x64748b, 0x78716c];
 
@@ -93,9 +96,6 @@ pub struct App {
     pub lang: Lang,
     pub dir: PathBuf,
     pub data: Data,
-    pub tex: Textures,
-    /// The real app icon (assets/icon.png), decoded once.
-    pub logo: egui::TextureHandle,
     pub updater: Updater,
     pub worker: Worker,
     pub tray: Option<Tray>,
@@ -130,6 +130,7 @@ pub struct App {
 
 impl App {
     pub fn new(cc: &eframe::CreationContext<'_>, mut cfg: Config, dir: PathBuf, start_hidden: bool) -> Self {
+        theme::set_accent(ACCENT);
         theme::install(&cc.egui_ctx, cfg.theme);
         // One rule for vertical alignment: every row is at least as tall as the tallest control (the segmented
         // control and icon buttons are 34 px), so labels, buttons, chips and icons that share a row are centred
@@ -198,12 +199,6 @@ impl App {
         let last_nav = cfg.nav.clone();
         Self {
             lang,
-            tex: Textures::new(&cc.egui_ctx),
-            logo: {
-                let img = eframe::icon_data::from_png_bytes(ICON_PNG).unwrap_or_default();
-                let ci = egui::ColorImage::from_rgba_unmultiplied([img.width as usize, img.height as usize], &img.rgba);
-                cc.egui_ctx.load_texture("app-logo", ci, egui::TextureOptions::LINEAR)
-            },
             updater,
             worker,
             tray,
@@ -645,12 +640,13 @@ impl eframe::App for App {
         self.handle_keys(&ctx);
 
         egui::Panel::left("sidebar")
-            .exact_size(if self.cfg.sidebar_collapsed { 68.0 } else { 236.0 })
+            .exact_size(if self.cfg.sidebar_collapsed { 68.0 } else { 240.0 })
             .resizable(false)
-            .frame(Frame::new().fill(p.sidebar).inner_margin(if self.cfg.sidebar_collapsed {
-                Margin { left: 10, right: 10, top: 18, bottom: 12 }
+            .show_separator_line(false)
+            .frame(Frame::new().fill(p.sidebar).stroke(egui::Stroke::NONE).inner_margin(if self.cfg.sidebar_collapsed {
+                Margin { left: 8, right: 8, top: 16, bottom: 12 }
             } else {
-                Margin { left: 14, right: 12, top: 18, bottom: 12 }
+                Margin { left: 12, right: 12, top: 16, bottom: 12 }
             }))
             .show(ui, |ui| self.sidebar(ui, &p));
 
@@ -662,9 +658,10 @@ impl eframe::App for App {
         let central_rect = Rect::from_min_max(area.min, egui::pos2(area.right() - editor_w, area.bottom()));
         {
             ui.painter().rect_filled(central_rect, 0.0, p.bg);
+            ui.painter().vline(central_rect.left(), central_rect.y_range(), egui::Stroke::new(1.0, p.line));
             let inner = Rect::from_min_max(
-                central_rect.min + egui::vec2(28.0, 20.0),
-                central_rect.max - egui::vec2(28.0, 16.0),
+                central_rect.min + egui::vec2(24.0, 24.0),
+                central_rect.max - egui::vec2(24.0, 16.0),
             );
             let mut cui = ui.new_child(egui::UiBuilder::new().id_salt("central").max_rect(inner).layout(egui::Layout::top_down(egui::Align::Min)));
             cui.set_clip_rect(central_rect);
@@ -680,7 +677,7 @@ impl eframe::App for App {
             let rect = Rect::from_min_max(egui::pos2(area.right() - editor_w, area.top()), area.max);
             ui.painter().rect_filled(rect, 0.0, p.sidebar);
             ui.painter().vline(rect.left(), rect.y_range(), egui::Stroke::new(1.0, p.line));
-            let inner = Rect::from_min_max(rect.min + egui::vec2(20.0, 18.0), rect.max - egui::vec2(14.0, 12.0));
+            let inner = Rect::from_min_max(rect.min + egui::vec2(20.0, 20.0), rect.max - egui::vec2(12.0, 12.0));
             let mut eui = ui.new_child(egui::UiBuilder::new().id_salt("editor-panel").max_rect(inner).layout(egui::Layout::top_down(egui::Align::Min)));
             eui.set_clip_rect(rect);
             self.editor_panel(&mut eui, &p);
@@ -733,6 +730,23 @@ pub fn modal_generation(ctx: &egui::Context) -> u64 {
 /// Pure rule: a new generation starts whenever a modal opens after none was open.
 pub fn next_generation(was_open: bool, is_open: bool, gen: u64) -> u64 {
     if is_open && !was_open { gen + 1 } else { gen }
+}
+
+#[cfg(test)]
+mod accent_tests {
+    use super::ACCENT;
+    use crate::theme::{self, Pal};
+
+    #[test]
+    fn accent_is_readable_in_both_themes() {
+        theme::set_accent(ACCENT);
+        assert!(theme::accent_problems().is_empty(), "{:?}", theme::accent_problems());
+        // The light accent is also used as text inside the raised side panel and on the raised hover surface.
+        let l = Pal::light();
+        for (name, s) in [("sidebar", l.sidebar), ("raised", l.raised)] {
+            assert!(theme::contrast(l.accent, s) >= 4.5, "light accent on {name}");
+        }
+    }
 }
 
 #[cfg(test)]

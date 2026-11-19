@@ -48,14 +48,14 @@ strings! {
         tomorrow: "Tomorrow", "Завтра", "Завтра";
         yesterday: "Yesterday", "Вчера", "Вчора";
         next_week: "Next week", "На следующей неделе", "Наступного тижня";
-        pick_date: "Pick a date…", "Выбрать дату…", "Обрати дату…";
+        pick_date: "Pick a date", "Выбрать дату", "Обрати дату";
         set_date: "Set date", "Задать дату", "Задати дату";
         date_label: "Date", "Дата", "Дата";
         coming_up: "Coming up", "Ближайшие дни", "Найближчі дні";
         overdue: "Overdue", "Просрочено", "Прострочено";
         nothing_today: "Nothing planned for today", "На сегодня ничего не запланировано", "На сьогодні нічого не заплановано";
-        nothing_today_hint: "Press Ctrl+N to add a task.", "Нажмите Ctrl+N, чтобы добавить задачу.", "Натисніть Ctrl+N, щоб додати завдання.";
-        nothing_on_day: "Nothing on this day yet.", "На этот день пока ничего нет.", "На цей день поки нічого немає.";
+        nothing_today_hint: "Press Ctrl+N to add a task", "Нажмите Ctrl+N, чтобы добавить задачу", "Натисніть Ctrl+N, щоб додати завдання";
+        nothing_on_day: "Nothing on this day yet", "На этот день пока ничего нет", "На цей день поки нічого немає";
         add_on_day: "Add task on this day", "Добавить задачу на этот день", "Додати завдання на цей день";
         added_to: "Task added to {where}", "Задача добавлена: {where}", "Завдання додано: {where}";
         task_deleted: "Task deleted", "Задача удалена", "Завдання видалено";
@@ -67,9 +67,9 @@ strings! {
 
         // Lists
         no_tasks: "No tasks here", "Здесь пока нет задач", "Тут поки немає завдань";
-        no_tasks_hint: "Type a title above and press Enter.", "Введите название выше и нажмите Enter.", "Введіть назву вище й натисніть Enter.";
-        add_task_hint: "Add a task and press Enter…", "Новая задача: введите и нажмите Enter…", "Нове завдання: введіть і натисніть Enter…";
-        filter_hint: "Search…", "Поиск…", "Пошук…";
+        no_tasks_hint: "Type a title above and press Enter", "Введите название выше и нажмите Enter", "Введіть назву вище й натисніть Enter";
+        add_task_hint: "Add a task", "Добавить задачу", "Додати завдання";
+        filter_hint: "Search", "Поиск", "Пошук";
         clear_filters: "Clear filters", "Сбросить фильтры", "Скинути фільтри";
         sort_by: "Sort", "Порядок", "Порядок";
         sort_manual: "Manual", "Вручную", "Вручну";
@@ -141,32 +141,32 @@ strings! {
         every: "Every", "Каждые", "Кожні";
         days_word: "days", "дн.", "дн.";
         until: "Until", "До", "До";
-        rec_hint: "Completing one occurrence does not complete the series.", "Выполнение одного повтора не закрывает всю серию.", "Виконання одного повтору не закриває всю серію.";
+        rec_hint: "Completing one occurrence does not complete the series", "Выполнение одного повтора не закрывает всю серию", "Виконання одного повтору не закриває всю серію";
         reminder: "Reminder", "Напоминание", "Нагадування";
         remind_default: "Default ({n} min)", "По умолчанию ({n} мин)", "За замовчуванням ({n} хв)";
         remind_off: "Off", "Выкл.", "Вимк.";
         remind_at: "At the time", "В момент события", "У момент події";
         remind_min: "{n} min before", "За {n} мин", "За {n} хв";
         description: "Description", "Описание", "Опис";
-        description_hint: "Notes, details…", "Заметки, подробности…", "Нотатки, подробиці…";
+        description_hint: "Notes", "Заметки", "Нотатки";
         links: "Links", "Ссылки", "Посилання";
         link_title_hint: "Title (optional)", "Название (необязательно)", "Назва (необовʼязково)";
         add_link_hint: "Paste a link and press Enter", "Вставьте ссылку и нажмите Enter", "Вставте посилання й натисніть Enter";
-        bad_url: "This is not a valid web address.", "Это не похоже на веб-адрес.", "Це не схоже на вебадресу.";
+        bad_url: "This is not a valid web address", "Это не похоже на веб-адрес", "Це не схоже на вебадресу";
         checklist: "Checklist", "Чек-лист", "Чекліст";
         add_item_hint: "Add a checklist item", "Добавить пункт", "Додати пункт";
         created_updated: "Created {c} · Updated {u}", "Создана {c} · Изменена {u}", "Створено {c} · Змінено {u}";
 
         // Search
         search_hint: "Search tasks by title or description", "Поиск по названию и описанию", "Пошук за назвою й описом";
-        search_prompt: "Start typing to search all tasks.", "Начните вводить, чтобы искать по всем задачам.", "Почніть вводити, щоб шукати серед усіх завдань.";
-        search_none: "No tasks found.", "Ничего не найдено.", "Нічого не знайдено.";
+        search_prompt: "Start typing to search all tasks", "Начните вводить, чтобы искать по всем задачам", "Почніть вводити, щоб шукати серед усіх завдань";
+        search_none: "No tasks found", "Ничего не найдено", "Нічого не знайдено";
 
         // PDF export
         export_pdf: "Export PDF", "Экспорт в PDF", "Експорт у PDF";
         pdf_saved: "PDF saved", "PDF сохранён", "PDF збережено";
         show_in_folder: "Show in folder", "Показать в папке", "Показати в теці";
-        pdf_failed: "Could not create the PDF.", "Не удалось создать PDF.", "Не вдалося створити PDF.";
+        pdf_failed: "Could not create the PDF", "Не удалось создать PDF", "Не вдалося створити PDF";
         pdf_page: "Page {n} of {total}", "Страница {n} из {total}", "Сторінка {n} з {total}";
         pdf_profile: "Profile: {p}", "Профиль: {p}", "Профіль: {p}";
         pdf_deadline: "deadline", "дедлайн", "дедлайн";
@@ -180,30 +180,30 @@ strings! {
         monday: "Monday", "Понедельник", "Понеділок";
         sunday: "Sunday", "Воскресенье", "Неділя";
         time_format: "Time format", "Формат времени", "Формат часу";
-        week_fixed_hint: "The week starts on Monday and time is shown in 24-hour format.", "Неделя начинается с понедельника, время показывается в 24-часовом формате.", "Тиждень починається з понеділка, час показується в 24-годинному форматі.";
+        week_fixed_hint: "The week starts on Monday and time is shown in 24-hour format", "Неделя начинается с понедельника, время показывается в 24-часовом формате", "Тиждень починається з понеділка, час показується в 24-годинному форматі";
         autostart: "Start with Windows", "Запускать вместе с Windows", "Запускати разом із Windows";
         autostart_os: "Start with the system", "Запускать вместе с системой", "Запускати разом із системою";
-        autostart_hint: "Planora starts minimised in the tray so reminders keep working.", "Planora запускается свёрнутой в трей, чтобы напоминания работали.", "Planora запускається згорнутою в трей, щоб нагадування працювали.";
-        autostart_failed: "Could not change the startup setting.", "Не удалось изменить автозапуск.", "Не вдалося змінити автозапуск.";
+        autostart_hint: "Planora starts minimised in the tray so reminders keep working", "Planora запускается свёрнутой в трей, чтобы напоминания работали", "Planora запускається згорнутою в трей, щоб нагадування працювали";
+        autostart_failed: "Could not change the startup setting", "Не удалось изменить автозапуск", "Не вдалося змінити автозапуск";
         close_to_tray: "Close to tray", "Сворачивать в трей при закрытии", "Згортати в трей при закритті";
-        close_to_tray_hint: "The close button hides Planora instead of quitting, so reminders keep working.", "Кнопка закрытия прячет Planora в трей, а не завершает её, поэтому напоминания работают.", "Кнопка закриття ховає Planora в трей, а не завершує її, тому нагадування працюють.";
+        close_to_tray_hint: "The close button hides Planora instead of quitting, so reminders keep working", "Кнопка закрытия прячет Planora в трей, а не завершает её, поэтому напоминания работают", "Кнопка закриття ховає Planora в трей, а не завершує її, тому нагадування працюють";
         notifications: "Notifications", "Уведомления", "Сповіщення";
-        notifications_hint: "Show a Windows notification when a reminder is due.", "Показывать уведомление Windows, когда подходит время напоминания.", "Показувати сповіщення Windows, коли настає час нагадування.";
-        notifications_hint_os: "Show a desktop notification when a reminder is due.", "Показывать уведомление на рабочем столе, когда подходит время напоминания.", "Показувати сповіщення на робочому столі, коли настає час нагадування.";
+        notifications_hint: "Show a Windows notification when a reminder is due", "Показывать уведомление Windows, когда подходит время напоминания", "Показувати сповіщення Windows, коли настає час нагадування";
+        notifications_hint_os: "Show a desktop notification when a reminder is due", "Показывать уведомление на рабочем столе, когда подходит время напоминания", "Показувати сповіщення на робочому столі, коли настає час нагадування";
         default_reminder: "Default reminder", "Напоминание по умолчанию", "Нагадування за замовчуванням";
         open_data_folder: "Open data folder", "Открыть папку данных", "Відкрити теку даних";
         export_json: "Export JSON", "Экспорт в JSON", "Експорт у JSON";
         import_json: "Import JSON", "Импорт из JSON", "Імпорт із JSON";
         exported: "Data exported", "Данные экспортированы", "Дані експортовано";
         export_failed: "Export failed", "Не удалось экспортировать", "Не вдалося експортувати";
-        import_failed: "That file is not a valid Planora export.", "Этот файл не похож на экспорт Planora.", "Цей файл не схожий на експорт Planora.";
+        import_failed: "That file is not a valid Planora export", "Этот файл не похож на экспорт Planora", "Цей файл не схожий на експорт Planora";
         backups: "Backups", "Резервные копии", "Резервні копії";
-        backups_hint: "One automatic backup per day; the last 14 are kept.", "Одна автокопия в день, хранятся последние 14.", "Одна автокопія на день, зберігаються останні 14.";
-        no_backups: "No backups yet.", "Копий пока нет.", "Копій поки немає.";
+        backups_hint: "One automatic backup per day; the last 14 are kept", "Одна автокопия в день, хранятся последние 14", "Одна автокопія на день, зберігаються останні 14";
+        no_backups: "No backups yet", "Копий пока нет", "Копій поки немає";
         restore: "Restore", "Восстановить", "Відновити";
-        restore_failed: "This backup could not be read.", "Не удалось прочитать эту копию.", "Не вдалося прочитати цю копію.";
+        restore_failed: "This backup could not be read", "Не удалось прочитать эту копию", "Не вдалося прочитати цю копію";
         replace_q: "Replace all current data?", "Заменить все текущие данные?", "Замінити всі поточні дані?";
-        replace_hint: "Your current data is kept as a safety copy in the backups folder.", "Текущие данные сохранятся как страховочная копия в папке backups.", "Поточні дані збережуться як страховинна копія в теці backups.";
+        replace_hint: "Your current data is kept as a safety copy in the backups folder", "Текущие данные сохранятся как страховочная копия в папке backups", "Поточні дані збережуться як страховинна копія в теці backups";
         replace: "Replace", "Заменить", "Замінити";
         data_replaced: "Data replaced", "Данные заменены", "Дані замінено";
         about: "About", "О программе", "Про програму";
@@ -212,7 +212,7 @@ strings! {
         // Dialogs
         dismiss: "Dismiss", "Закрыть", "Закрити";
         missed_title: "Missed reminders", "Пропущенные напоминания", "Пропущені нагадування";
-        missed_hint: "These came due while Planora was not running.", "Их время наступило, пока Planora не была запущена.", "Їхній час настав, поки Planora не була запущена.";
+        missed_hint: "These came due while Planora was not running", "Их время наступило, пока Planora не была запущена", "Їхній час настав, поки Planora не була запущена";
         corrupt_title: "Your data file could not be read", "Не удалось прочитать файл данных", "Не вдалося прочитати файл даних";
         corrupt_text: "The file was renamed to {file} and Planora started empty. Daily backups are in the data folder under backups: open Settings and restore one.", "Файл переименован в {file}, Planora запущена с пустыми данными. Ежедневные копии лежат в папке данных, в подпапке backups: откройте «Настройки» и восстановите одну из них.", "Файл перейменовано на {file}, Planora запущена з порожніми даними. Щоденні копії лежать у теці даних, у підтеці backups: відкрийте «Налаштування» й відновіть одну з них.";
 

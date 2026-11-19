@@ -12,13 +12,14 @@ use crate::nimvoro::{self, UpdateState};
 use crate::platform;
 use crate::support;
 use crate::theme::{self, Btn, Pal};
-use eframe::egui::{self, Align, Frame, Layout, Margin, RichText, ScrollArea, Stroke, Ui};
+use eframe::egui::{self, Align, Layout, Margin, RichText, ScrollArea, Ui};
 
+/// A titled group: a section title (24 above, 8 below) over a card.
 fn group<R>(ui: &mut Ui, p: &Pal, title: &str, add: impl FnOnce(&mut Ui) -> R) -> R {
-    ui.add_space(14.0);
-    theme::caps(ui, title, p);
-    ui.add_space(4.0);
-    Frame::new().fill(p.card).stroke(Stroke::new(1.0, p.line)).corner_radius(14).inner_margin(Margin::symmetric(18, 14)).show(ui, |ui| {
+    ui.add_space(24.0);
+    theme::section(ui, title, p);
+    ui.add_space(8.0);
+    theme::card(p).inner_margin(Margin::symmetric(16, 12)).show(ui, |ui| {
         ui.set_width(ui.available_width());
         add(ui)
     })
@@ -30,10 +31,10 @@ fn switch_row(ui: &mut Ui, p: &Pal, title: &str, hint: &str, value: &mut bool) -
     let w = ui.available_width();
     ui.horizontal(|ui| {
         ui.vertical(|ui| {
-            ui.set_width(w - 58.0);
+            ui.set_width(w - 56.0);
+            ui.spacing_mut().item_spacing.y = 2.0;
             ui.label(RichText::new(title).font(theme::reg(14.0)).color(p.text));
             if !hint.is_empty() {
-                ui.add_space(-6.0);
                 theme::hint(ui, hint, p);
             }
         });
@@ -41,7 +42,7 @@ fn switch_row(ui: &mut Ui, p: &Pal, title: &str, hint: &str, value: &mut bool) -
             changed = theme::switch(ui, value, p).changed();
         });
     });
-    ui.add_space(6.0);
+    ui.add_space(8.0);
     changed
 }
 
@@ -60,7 +61,7 @@ fn combo_row<T: PartialEq + Copy>(ui: &mut Ui, p: &Pal, title: &str, id: &str, c
             });
         });
     });
-    ui.add_space(6.0);
+    ui.add_space(8.0);
     picked
 }
 
@@ -76,8 +77,7 @@ impl App {
             ui.add_space(((avail - col_w) / 2.0).max(0.0));
             ui.vertical(|ui| {
             ui.set_width(col_w);
-            ui.label(RichText::new(t.settings).font(theme::bold(24.0)).color(p.text));
-            ui.add_space(2.0);
+            ui.label(RichText::new(t.settings).font(theme::medium(24.0)).color(p.text));
 
             // ── Interface
             group(ui, p, t.group_interface, |ui| {
@@ -102,14 +102,12 @@ impl App {
                     self.sync_worker();
                     self.touch_cfg(&ctx);
                 }
-                ui.add_space(6.0);
                 let theme_opts: Vec<(theme::ThemeMode, &str)> = theme::ThemeMode::ALL.iter().map(|m| (*m, i18n::theme_name(*m, self.lang))).collect();
                 if let Some(m) = combo_row(ui, p, i18n::theme_label(self.lang), "theme", self.cfg.theme, &theme_opts, 150.0) {
                     self.cfg.theme = m;
                     theme::apply(&ctx, m);
                     self.touch_cfg(&ctx);
                 }
-                ui.add_space(6.0);
                 if self.lang == i18n::Lang::En {
                     let cur = self.cfg.week_starts_sunday;
                     if let Some(v) = combo_row(ui, p, t.week_start, "weekstart", cur, &[(false, t.monday), (true, t.sunday)], 150.0) {
@@ -158,7 +156,7 @@ impl App {
                     self.touch_cfg(&ctx);
                 }
                 if let Some(m) = &self.settings_msg {
-                    ui.label(RichText::new(m).font(theme::reg(12.5)).color(widgets::RED));
+                    ui.label(RichText::new(m).font(theme::reg(12.0)).color(p.negative));
                 }
             });
 
@@ -166,7 +164,7 @@ impl App {
             group(ui, p, t.group_profiles, |ui| {
                 for profile in Profile::ALL {
                     ui.label(RichText::new(self.profile_name(profile)).font(theme::reg(14.0)).color(p.text));
-                    ui.add_space(2.0);
+                    ui.add_space(4.0);
                     let mut c = self.cfg.profile_color(profile);
                     let before = c;
                     color_swatches(ui, &mut c, p);
@@ -183,31 +181,31 @@ impl App {
 
             // ── Data
             group(ui, p, t.group_data, |ui| {
-                ui.label(RichText::new(self.dir.display().to_string()).font(theme::reg(12.5)).color(p.muted));
-                ui.add_space(6.0);
+                ui.label(RichText::new(self.dir.display().to_string()).font(theme::mono(12.0)).color(p.muted));
+                ui.add_space(8.0);
                 ui.horizontal_wrapped(|ui| {
-                    if widgets::btn(ui, t.open_data_folder, Btn::Soft, p).clicked() {
+                    if widgets::btn(ui, t.open_data_folder, Btn::Secondary, p).clicked() {
                         open_folder(&self.dir);
                     }
-                    if widgets::btn(ui, t.export_json, Btn::Soft, p).clicked() {
+                    if widgets::btn(ui, t.export_json, Btn::Secondary, p).clicked() {
                         self.export_json(&ctx);
                     }
-                    if widgets::btn(ui, t.import_json, Btn::Soft, p).clicked() {
+                    if widgets::btn(ui, t.import_json, Btn::Secondary, p).clicked() {
                         self.import_json();
                     }
                 });
-                ui.add_space(10.0);
-                theme::caps(ui, t.backups, p);
-                ui.add_space(2.0);
-                theme::hint(ui, t.backups_hint, p);
+                theme::divider(ui, p);
+                theme::section(ui, t.backups, p);
                 ui.add_space(4.0);
+                theme::hint(ui, t.backups_hint, p);
+                ui.add_space(8.0);
                 if self.backups.is_empty() {
                     theme::hint(ui, t.no_backups, p);
                 }
                 let mut restore = None;
                 for (day, path) in self.backups.iter().take(14) {
                     ui.horizontal(|ui| {
-                        ui.label(RichText::new(fmt::date_long(self.lang, *day)).font(theme::reg(13.5)).color(p.text));
+                        ui.label(RichText::new(fmt::date_long(self.lang, *day)).font(theme::reg(14.0)).color(p.text));
                         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                             if widgets::btn(ui, t.restore, Btn::Small, p).clicked() {
                                 restore = Some(path.clone());
@@ -232,14 +230,14 @@ impl App {
                     self.touch_cfg(&ctx);
                 }
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new(self.updater.status_text(self.lang)).font(theme::reg(13.5)).color(p.muted));
+                    ui.label(RichText::new(self.updater.status_text(self.lang)).font(theme::reg(13.0)).color(p.text2));
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         if let UpdateState::Available { .. } = self.updater.state() {
-                            if widgets::btn(ui, u.update_btn, Btn::Soft, p).clicked() && self.updater.apply() {
+                            if widgets::btn(ui, u.update_btn, Btn::Primary, p).clicked() && self.updater.apply() {
                                 self.quit(&ctx);
                             }
                         }
-                        if widgets::btn(ui, u.check_now, Btn::Ghost, p).clicked() {
+                        if widgets::btn(ui, u.check_now, Btn::Secondary, p).clicked() {
                             let c = ctx.clone();
                             self.updater.check(move || c.request_repaint());
                         }
@@ -248,26 +246,25 @@ impl App {
             });
 
             // ── Support the author
-            group(ui, p, support::title(self.lang), |ui| {
-                support::support_body(ui, self.lang);
-            });
+            ui.add_space(24.0);
+            support::support_section(ui, self.lang);
 
             // ── About
             group(ui, p, t.about, |ui| {
                 ui.horizontal(|ui| {
-                    widgets::logo_image(ui, &self.logo, 40.0);
+                    theme::mark(ui, 32.0, widgets::mark_glyph, p);
                     ui.vertical(|ui| {
-                        ui.label(RichText::new("Planora").font(theme::semi(15.0)).color(p.text));
-                        ui.add_space(-6.0);
-                        theme::hint(ui, &format!("{} {}", t.version, env!("CARGO_PKG_VERSION")), p);
+                        ui.spacing_mut().item_spacing.y = 2.0;
+                        ui.label(RichText::new("Planora").font(theme::medium(15.0)).color(p.text));
+                        theme::meta(ui, &format!("{} {}", t.version, env!("CARGO_PKG_VERSION")), p);
                     });
                 });
-                ui.add_space(6.0);
+                ui.add_space(8.0);
                 if widgets::btn(ui, crate::REPO_URL, Btn::Link, p).clicked() {
                     ctx.open_url(egui::OpenUrl::new_tab(crate::REPO_URL));
                 }
             });
-            ui.add_space(16.0);
+            ui.add_space(24.0);
             });
           });
         });

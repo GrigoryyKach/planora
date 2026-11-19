@@ -131,12 +131,12 @@ impl App {
                 Some(pr) => (widgets::rgb(pr.color), pr.name.clone()),
                 None => (self.color_of(profile), format!("{} · {}", self.profile_name(profile), t.inbox)),
             };
-            let (r, _) = ui.allocate_exact_size(vec2(14.0, 14.0), Sense::hover());
-            ui.painter().rect_filled(r, 4.0, dot);
-            ui.add(egui::Label::new(RichText::new(title).font(theme::bold(24.0)).color(p.text)).truncate());
+            let (r, _) = ui.allocate_exact_size(vec2(12.0, 12.0), Sense::hover());
+            ui.painter().rect_filled(r, 3.0, dot);
+            ui.add(egui::Label::new(RichText::new(title).font(theme::medium(24.0)).color(p.text)).truncate());
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| self.header_right(ui, p, false, Some(super::export::ExportTarget::Scope(scope.clone()))));
         });
-        ui.add_space(10.0);
+        ui.add_space(16.0);
 
         ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
             // Project card, or cards of all projects in the inbox.
@@ -157,13 +157,16 @@ impl App {
                                 }
                             }
                         });
-                        ui.add_space(14.0);
+                        ui.add_space(16.0);
                     }
                 }
             }
 
+            if project.is_some() {
+                ui.add_space(8.0);
+            }
             self.quick_add_row(ui, p, profile, project.as_ref().map(|x| x.id.clone()));
-            ui.add_space(10.0);
+            ui.add_space(12.0);
             self.filter_bar(ui, p);
             ui.add_space(8.0);
 
@@ -172,7 +175,7 @@ impl App {
             if rows.is_empty() {
                 ui.add_space(30.0);
                 ui.vertical_centered(|ui| {
-                    ui.label(RichText::new(t.no_tasks).font(theme::semi(16.0)).color(p.text));
+                    ui.label(RichText::new(t.no_tasks).font(theme::medium(16.0)).color(p.text));
                     ui.add_space(2.0);
                     theme::hint(ui, t.no_tasks_hint, p);
                 });
@@ -231,23 +234,23 @@ impl App {
         let color = widgets::rgb(pr.color);
         let size = if wide { vec2(ui.available_width(), 96.0) } else { vec2(228.0, 92.0) };
         let (rect, resp) = ui.allocate_exact_size(size, if wide { Sense::hover() } else { Sense::click() });
-        let hov = resp.hovered() && !wide;
-        ui.painter().rect(rect, 14.0, if hov { theme::mix(p.card, color, 0.07) } else { p.card }, Stroke::new(1.0, if hov { color } else { p.line }), StrokeKind::Inside);
-        ui.painter().rect_filled(Rect::from_min_size(rect.min + vec2(0.0, 14.0), vec2(4.0, rect.height() - 28.0)), 2.0, color);
-        let x = rect.left() + 18.0;
-        let g = fit_text(ui.painter(), &pr.name, theme::semi(15.0), p.text, rect.width() - 36.0, None);
+        let hov = theme::fade(ui, resp.id.with("hover"), resp.hovered() && !wide);
+        ui.painter().rect(rect, theme::R_CARD as f32, theme::mix(p.card, p.raised, hov), Stroke::new(1.0, theme::mix(p.line, p.line_hi, hov)), StrokeKind::Inside);
+        ui.painter().rect_filled(Rect::from_min_size(rect.min + vec2(0.0, 16.0), vec2(4.0, rect.height() - 32.0)), 2.0, color);
+        let x = rect.left() + 20.0;
+        let g = fit_text(ui.painter(), &pr.name, theme::medium(15.0), p.text, rect.width() - 40.0, None);
         ui.painter().galley(pos2(x, rect.top() + 12.0), g, p.text);
         let mut y = rect.top() + 38.0;
         if wide && !pr.description.is_empty() {
-            let g = fit_text(ui.painter(), &pr.description, theme::reg(12.5), p.muted, rect.width() - 200.0, None);
+            let g = fit_text(ui.painter(), &pr.description, theme::reg(12.0), p.muted, rect.width() - 200.0, None);
             ui.painter().galley(pos2(x, y - 4.0), g, p.muted);
             y += 18.0;
         }
         // Progress bar.
-        let bar = Rect::from_min_size(pos2(x, y + 4.0), vec2((rect.width() - 36.0 - if wide { 160.0 } else { 0.0 }).max(60.0), 7.0));
-        ui.painter().rect_filled(bar, 4.0, p.track.gamma_multiply(0.5));
+        let bar = Rect::from_min_size(pos2(x, y + 4.0), vec2((rect.width() - 40.0 - if wide { 160.0 } else { 0.0 }).max(60.0), 4.0));
+        ui.painter().rect_filled(bar, 2.0, p.line_hi);
         if share > 0.0 {
-            ui.painter().rect_filled(Rect::from_min_size(bar.min, vec2(bar.width() * share, bar.height())), 4.0, color);
+            ui.painter().rect_filled(Rect::from_min_size(bar.min, vec2(bar.width() * share, bar.height())), 2.0, color);
         }
         let stats = t.project_progress.replace("{done}", &done.to_string()).replace("{total}", &total.to_string());
         ui.painter().text(pos2(x, bar.bottom() + 8.0), Align2::LEFT_TOP, stats, theme::reg(12.0), p.muted);
@@ -259,13 +262,13 @@ impl App {
                 Align2::RIGHT_TOP,
                 label,
                 theme::reg(12.0),
-                if od { widgets::RED } else { p.muted },
+                if od { p.negative } else { p.muted },
             );
         }
         if wide {
             // Edit button in the card corner.
-            let br = Rect::from_min_size(pos2(rect.right() - 140.0, rect.top() + 14.0), vec2(124.0, 30.0));
-            let resp = theme::button_at(ui, br, ui.scope_id().with("edit-project"), t.edit_project, Btn::Ghost, p);
+            let br = Rect::from_min_size(pos2(rect.right() - 148.0, rect.top() + 16.0), vec2(132.0, Btn::Secondary.height()));
+            let resp = theme::button_at(ui, br, ui.scope_id().with("edit-project"), t.edit_project, Btn::Secondary, p);
             if resp.clicked() {
                 self.dialog = Some(Dialog::project_edit(&pr));
             }
@@ -285,7 +288,7 @@ impl App {
             let w = ui.available_width() - 100.0;
             let resp = widgets::input(ui, &mut text, t.add_task_hint, w);
             let enter = resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-            let click = widgets::btn(ui, t.add, Btn::Soft, p).clicked();
+            let click = widgets::btn(ui, t.add, Btn::Secondary, p).clicked();
             if (enter || click) && !text.trim().is_empty() {
                 added = true;
                 if enter {
@@ -316,10 +319,10 @@ impl App {
             widgets::multi_select(ui, "f-deadline", t.deadline_label, all, t.clear, &[t.dl_overdue, t.dl_today, t.dl_week, t.dl_none], &mut self.filter.deadline, p);
             ui.add_space(6.0);
             // The sort label and its dropdown stay together when the row wraps.
-            let sort_w = ui.painter().layout_no_wrap(t.sort_by.to_string(), theme::reg(13.0), p.muted).size().x + 8.0 + 130.0 + 16.0;
+            let sort_w = ui.painter().layout_no_wrap(t.sort_by.to_string(), theme::reg(13.0), p.text2).size().x + 8.0 + 130.0 + 16.0;
             ui.allocate_ui_with_layout(vec2(sort_w, super::ROW_H), Layout::left_to_right(Align::Center), |ui| {
                 let mut s = self.cfg.sort;
-                ui.label(RichText::new(t.sort_by).font(theme::reg(13.0)).color(p.muted));
+                ui.label(RichText::new(t.sort_by).font(theme::reg(13.0)).color(p.text2));
                 let names = [(SortMode::Manual, t.sort_manual), (SortMode::Deadline, t.sort_deadline), (SortMode::Priority, t.sort_priority), (SortMode::Created, t.sort_created)];
                 let cur = names.iter().find(|n| n.0 == s).map(|n| n.1).unwrap_or("");
                 widgets::combo("sort", cur, 130.0).show_ui(ui, |ui| {
@@ -348,21 +351,21 @@ impl App {
         let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 20.0), Sense::hover());
         let cols = columns(rect.width());
         let y = rect.center().y;
-        let f = theme::semi(11.0);
-        let right = rect.right() - 14.0;
+        let f = theme::medium(12.0);
+        let right = rect.right() - 16.0;
         let st = ui.painter();
-        st.text(pos2(rect.left() + 48.0, y), Align2::LEFT_CENTER, t.col_title.to_uppercase(), f.clone(), p.muted);
-        st.text(pos2(right - cols.prio_x, y), Align2::LEFT_CENTER, t.col_priority.to_uppercase(), f.clone(), p.muted);
-        st.text(pos2(right - cols.deadline_x, y), Align2::LEFT_CENTER, t.col_deadline.to_uppercase(), f.clone(), p.muted);
-        st.text(pos2(right - cols.sched_x, y), Align2::LEFT_CENTER, t.col_scheduled.to_uppercase(), f, p.muted);
+        st.text(pos2(rect.left() + 52.0, y), Align2::LEFT_CENTER, t.col_title, f.clone(), p.muted);
+        st.text(pos2(right - cols.prio_x, y), Align2::LEFT_CENTER, t.col_priority, f.clone(), p.muted);
+        st.text(pos2(right - cols.deadline_x, y), Align2::LEFT_CENTER, t.col_deadline, f.clone(), p.muted);
+        st.text(pos2(right - cols.sched_x, y), Align2::LEFT_CENTER, t.col_scheduled, f, p.muted);
     }
 
     #[allow(clippy::too_many_lines)]
     fn task_row(&self, ui: &mut Ui, p: &Pal, task: &Task, prev: Option<String>, next: Option<String>) -> Option<RowAct> {
         let t = self.s();
         let mut act: Option<RowAct> = None;
-        let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 44.0), Sense::click());
-        let hov = resp.hovered();
+        let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 40.0), Sense::click());
+        let hov = theme::fade(ui, resp.id.with("hover"), resp.hovered());
         let selected = self.selected.as_deref() == Some(&task.id) || self.editor.as_ref().is_some_and(|e| e.id == task.id);
         let occ = crate::model::calendar::current_occurrence(task, self.today);
         let done = match (task.recurrence.is_some(), occ) {
@@ -370,17 +373,18 @@ impl App {
             _ => task.is_closed(),
         };
         let muted = done || task.status == Some(Status::Cancelled);
-        let fill = if selected { theme::mix(p.card, p.accent, 0.08) } else if hov { theme::mix(p.card, p.accent, 0.04) } else { p.card };
-        ui.painter().rect(rect, 10.0, fill, Stroke::new(1.0, if selected { p.accent } else { p.line }), StrokeKind::Inside);
+        // Selection is a raised surface with an outline; hover is the same surface fading in.
+        let fill = if selected { p.raised } else { theme::mix(p.card, p.raised, hov) };
+        ui.painter().rect(rect, theme::R_CONTROL as f32, fill, Stroke::new(1.0, if selected { p.line_hi } else { p.line }), StrokeKind::Inside);
         let cy = rect.center().y;
         let cols = columns(rect.width());
-        let right = rect.right() - 14.0;
+        let right = rect.right() - 16.0;
 
         // Status button (separate hit area on top of the row).
-        let sr = Rect::from_center_size(pos2(rect.left() + 26.0, cy), vec2(26.0, 26.0));
+        let sr = Rect::from_center_size(pos2(rect.left() + 28.0, cy), vec2(28.0, 28.0));
         let sresp = ui.interact(sr, ui.scope_id().with(("status", &task.id)), Sense::click());
         if sresp.hovered() {
-            ui.painter().circle_filled(sr.center(), 13.0, p.hover);
+            ui.painter().circle_filled(sr.center(), 14.0, p.raised_hi);
         }
         widgets::status_mark(ui.painter(), sr.center(), task.status, done, p);
         if sresp.on_hover_cursor(CursorIcon::PointingHand).on_hover_text(t.click_status).clicked() {
@@ -390,19 +394,15 @@ impl App {
         }
 
         // Title.
-        let mut x = rect.left() + 48.0;
-        if let Some(pr) = task.priority {
-            ui.painter().circle_filled(pos2(x + 4.0, cy), 4.0, widgets::priority_color(pr));
-            x += 14.0;
-        }
+        let x = rect.left() + 52.0;
         let tcol = if muted { p.muted } else { p.text };
         let strike = muted.then(|| Stroke::new(1.0, p.muted));
         let title_right = right - cols.sched_x - 8.0;
-        let g = fit_text(ui.painter(), &task.title, theme::semi(14.0), tcol, title_right - x, strike);
+        let g = fit_text(ui.painter(), &task.title, theme::reg(14.0), tcol, title_right - x, strike);
         ui.painter().galley(pos2(x, cy - g.size().y / 2.0), g, tcol);
 
         // Columns.
-        let font = theme::reg(12.5);
+        let font = theme::reg(12.0);
         if let Some(pr) = task.priority {
             ui.painter().circle_filled(pos2(right - cols.prio_x + 4.0, cy), 4.0, widgets::priority_color(pr));
             if cols.show_prio_text {
@@ -417,8 +417,8 @@ impl App {
         }
         if let Some(d) = task.deadline {
             let od = is_overdue(task, self.now);
-            let col = if od { widgets::RED } else if muted { p.muted } else { p.text };
-            widgets::icon(ui.painter(), Icon::Flag, pos2(right - cols.deadline_x + 5.0, cy), 12.0, if od { widgets::RED } else { p.muted });
+            let col = if od { p.negative } else if muted { p.muted } else { p.text };
+            widgets::icon(ui.painter(), Icon::Flag, pos2(right - cols.deadline_x + 5.0, cy), 12.0, if od { p.negative } else { p.muted });
             let mut dl = super::today_view::date_label(self, d);
             if let Some(tm) = task.deadline_time {
                 dl = format!("{dl} {}", fmt::time_text(tm, self.h24()));
@@ -446,7 +446,7 @@ impl App {
         let (cd, ct) = task.progress();
         if ct > 0 {
             let s = format!("{cd}/{ct}");
-            let g = ui.painter().layout_no_wrap(s, theme::semi(12.0), if cd == ct { widgets::GREEN } else { p.muted });
+            let g = ui.painter().layout_no_wrap(s, theme::mono(12.0), if cd == ct { p.positive } else { p.muted });
             let w = g.size().x;
             ui.painter().galley(pos2(mx - w, cy - g.size().y / 2.0), g, p.muted);
         }
@@ -538,12 +538,12 @@ impl App {
                 act = Some(RowAct::Dup(id.clone()));
                 ui.close();
             }
-            if ui.button(RichText::new(t.delete).color(widgets::RED)).clicked() {
+            if ui.button(RichText::new(t.delete).color(p.negative)).clicked() {
                 act = Some(RowAct::Del(id.clone()));
                 ui.close();
             }
         });
-        ui.add_space(3.0);
+        ui.add_space(4.0);
         act
     }
 }

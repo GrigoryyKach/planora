@@ -13,7 +13,7 @@ use crate::model::Data;
 use crate::theme::{self, Btn, Pal};
 use chrono::{Datelike, NaiveDate};
 use eframe::egui::{
-    self, Align, Align2, Color32, CursorIcon, Frame, Id, Layout, Margin, Order, Rect, RichText, ScrollArea, Sense, Stroke, StrokeKind, Ui, pos2,
+    self, Align, Align2, CursorIcon, Frame, Id, Layout, Margin, Order, Rect, RichText, ScrollArea, Sense, Stroke, Ui, pos2,
     vec2,
 };
 use std::path::PathBuf;
@@ -24,7 +24,7 @@ impl App {
         let t = self.s();
         let (mut close, mut confirm) = (false, false);
         let backdrop = modal(ctx, p, "replace", 460.0, |ui: &mut Ui| {
-            ui.label(RichText::new(t.replace_q).font(theme::bold(17.0)).color(p.text));
+            ui.label(RichText::new(t.replace_q).font(theme::medium(18.0)).color(p.text));
             ui.add_space(6.0);
             if let Some(f) = from {
                 theme::hint(ui, f, p);
@@ -40,7 +40,7 @@ impl App {
             );
             ui.add_space(4.0);
             theme::hint(ui, t.replace_hint, p);
-            ui.add_space(14.0);
+            ui.add_space(24.0);
             let f = footer(ui, self, p, None, &[t.cancel], t.replace, true);
             confirm |= f.primary;
             close |= f.secondary.is_some();
@@ -99,19 +99,17 @@ impl App {
         let mut close = false;
         let mut open: Option<String> = None;
         let backdrop = modal(ctx, p, "missed", 480.0, |ui: &mut Ui| {
-            ui.label(RichText::new(t.missed_title).font(theme::bold(18.0)).color(p.text));
+            ui.label(RichText::new(t.missed_title).font(theme::medium(18.0)).color(p.text));
             ui.add_space(2.0);
             theme::hint(ui, t.missed_hint, p);
             ui.add_space(8.0);
             ScrollArea::vertical().max_height(300.0).auto_shrink([false, true]).show(ui, |ui| {
                 for r in &list {
                     let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 40.0), Sense::click());
-                    if resp.hovered() {
-                        ui.painter().rect_filled(rect, 9.0, p.hover);
-                    }
+                    ui.painter().rect_filled(rect, theme::R_CONTROL as f32, theme::alpha(p.raised, (theme::fade(ui, resp.id.with("hover"), resp.hovered()) * 255.0) as u8));
                     let when = format!("{} {}", fmt::date_short(self.lang, r.event.date()), fmt::time_text(r.event.time(), self.h24()));
-                    let g = ui.painter().layout_no_wrap(when, theme::semi(13.0), p.accent);
-                    ui.painter().galley(pos2(rect.left() + 10.0, rect.center().y - g.size().y / 2.0), g, p.accent);
+                    let g = ui.painter().layout_no_wrap(when, theme::mono(12.0), p.text2);
+                    ui.painter().galley(pos2(rect.left() + 12.0, rect.center().y - g.size().y / 2.0), g, p.text2);
                     let g = super::calendar_view::fit_text(ui.painter(), &r.title, theme::reg(14.0), p.text, rect.width() - 150.0, None);
                     ui.painter().galley(pos2(rect.left() + 130.0, rect.center().y - g.size().y / 2.0), g, p.text);
                     if resp.on_hover_cursor(CursorIcon::PointingHand).clicked() {
@@ -119,7 +117,7 @@ impl App {
                     }
                 }
             });
-            ui.add_space(12.0);
+            ui.add_space(24.0);
             close |= footer(ui, self, p, None, &[], t.dismiss, true).primary;
         });
         if let Some(id) = open {
@@ -137,10 +135,10 @@ impl App {
         let mut close = false;
         let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
         let backdrop = modal(ctx, p, "corrupt", 500.0, |ui: &mut Ui| {
-            ui.label(RichText::new(t.corrupt_title).font(theme::bold(18.0)).color(p.text));
+            ui.label(RichText::new(t.corrupt_title).font(theme::medium(18.0)).color(p.text));
             ui.add_space(6.0);
             ui.add(egui::Label::new(RichText::new(t.corrupt_text.replace("{file}", &name)).font(theme::reg(14.0)).color(p.text)).wrap());
-            ui.add_space(14.0);
+            ui.add_space(24.0);
             let f = footer(ui, self, p, None, &[t.open_data_folder], t.ok, true);
             close |= f.primary;
             if f.secondary.is_some() {
@@ -166,9 +164,9 @@ impl App {
         let backdrop = modal(ctx, p, "day-panel", 520.0, |ui: &mut Ui| {
             ui.horizontal(|ui| {
                 ui.vertical(|ui| {
-                    ui.label(RichText::new(fmt::date_long(self.lang, day)).font(theme::bold(18.0)).color(p.text));
+                    ui.spacing_mut().item_spacing.y = 2.0;
+                    ui.label(RichText::new(fmt::date_long(self.lang, day)).font(theme::medium(18.0)).color(p.text));
                     if day == self.today {
-                        ui.add_space(-4.0);
                         theme::hint(ui, t.today, p);
                     }
                 });
@@ -186,7 +184,7 @@ impl App {
                     action = self.item_list(ui, p, &items, false);
                 }
             });
-            ui.add_space(10.0);
+            ui.add_space(24.0);
             let f = footer(ui, self, p, None, &[t.export_pdf], t.add_on_day, true);
             add |= f.primary;
             export |= f.secondary.is_some();
@@ -241,10 +239,10 @@ impl App {
         let area = egui::Area::new(Id::unique("date-picker")).order(Order::Tooltip).fixed_pos(pos).show(ctx, |ui| {
             Frame::new()
                 .fill(p.card)
-                .stroke(Stroke::new(1.0, p.line))
-                .corner_radius(14)
+                .stroke(Stroke::new(1.0, p.line_hi))
+                .corner_radius(theme::R_CARD)
                 .inner_margin(Margin::same(12))
-                .shadow(theme::shadow(10, 30, Color32::from_black_alpha(80)))
+                .shadow(theme::shadow_for(p))
                 .show(ui, |ui| {
                     ui.set_width(size.x - 24.0);
                     ui.horizontal(|ui| {
@@ -252,7 +250,7 @@ impl App {
                             pk.month = calendar::shift_month(pk.month.0, pk.month.1, -1);
                         }
                         let (r, _) = ui.allocate_exact_size(vec2(ui.available_width() - 36.0, 28.0), Sense::hover());
-                        ui.painter().text(r.center(), Align2::CENTER_CENTER, fmt::month_title(self.lang, pk.month.0, pk.month.1), theme::semi(14.0), p.text);
+                        ui.painter().text(r.center(), Align2::CENTER_CENTER, fmt::month_title(self.lang, pk.month.0, pk.month.1), theme::medium(14.0), p.text);
                         if widgets::icon_button(ui, Icon::Right, 28.0, p).clicked() {
                             pk.month = calendar::shift_month(pk.month.0, pk.month.1, 1);
                         }
@@ -265,7 +263,7 @@ impl App {
                             pos2(head.left() + cell * (i as f32 + 0.5), head.center().y),
                             Align2::CENTER_CENTER,
                             fmt::weekday_short(self.lang, *wd),
-                            theme::semi(11.0),
+                            theme::medium(12.0),
                             p.muted,
                         );
                     }
@@ -278,29 +276,30 @@ impl App {
                         if sel {
                             ui.painter().rect_filled(r, 8.0, p.accent);
                         } else if resp.hovered() {
-                            ui.painter().rect_filled(r, 8.0, p.hover);
-                        } else if today {
-                            ui.painter().rect_stroke(r, 8.0, Stroke::new(1.2, p.accent), StrokeKind::Inside);
+                            ui.painter().rect_filled(r, 8.0, p.raised);
+                        }
+                        if today && !sel {
+                            ui.painter().circle_stroke(r.center(), 12.0, Stroke::new(1.5, p.accent));
                         }
                         let in_month = d.month() == pk.month.1;
                         let col = if sel {
-                            Color32::WHITE
+                            p.on_accent
                         } else if in_month {
                             p.text
                         } else {
-                            p.muted.gamma_multiply(0.55)
+                            p.muted
                         };
-                        ui.painter().text(r.center(), Align2::CENTER_CENTER, d.day().to_string(), theme::reg(13.0), col);
+                        ui.painter().text(r.center(), Align2::CENTER_CENTER, d.day().to_string(), theme::mono(13.0), col);
                         if resp.on_hover_cursor(CursorIcon::PointingHand).clicked() {
                             chosen = Some(Some(*d));
                         }
                     }
                     ui.add_space(4.0);
                     ui.horizontal(|ui| {
-                        if widgets::btn(ui, t.today_btn, Btn::Soft, p).clicked() {
+                        if widgets::btn(ui, t.today_btn, Btn::Secondary, p).clicked() {
                             chosen = Some(Some(self.today));
                         }
-                        if widgets::btn(ui, t.clear, Btn::Ghost, p).clicked() {
+                        if widgets::btn(ui, t.clear, Btn::Quiet, p).clicked() {
                             chosen = Some(None);
                         }
                     });
@@ -317,7 +316,7 @@ impl App {
         }
     }
 
-    pub(super) fn toast_ui(&mut self, ctx: &egui::Context, _p: &Pal) {
+    pub(super) fn toast_ui(&mut self, ctx: &egui::Context, p: &Pal) {
         let Some(toast) = &self.toast else { return };
         let t = self.s();
         let text = toast.text.clone();
@@ -328,13 +327,14 @@ impl App {
         let dark = Pal::dark();
         egui::Area::new(Id::unique("toast")).order(Order::Tooltip).anchor(Align2::CENTER_BOTTOM, vec2(0.0, -22.0)).show(ctx, |ui| {
             Frame::new()
-                .fill(theme::hex(0x2b303a))
-                .corner_radius(12)
-                .inner_margin(Margin::symmetric(16, 10))
-                .shadow(theme::shadow(8, 24, Color32::from_black_alpha(70)))
+                .fill(dark.raised)
+                .stroke(Stroke::new(1.0, dark.line_hi))
+                .corner_radius(theme::R_CARD)
+                .inner_margin(Margin::symmetric(16, 8))
+                .shadow(theme::shadow_for(p))
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        ui.label(RichText::new(&text).font(theme::reg(14.0)).color(Color32::WHITE));
+                        ui.label(RichText::new(&text).font(theme::reg(14.0)).color(dark.text));
                         if has_undo {
                             ui.add_space(8.0);
                             if widgets::btn(ui, t.undo, Btn::Link, &dark).clicked() {
