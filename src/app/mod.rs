@@ -266,16 +266,20 @@ impl App {
         self.worker.update(&self.data.tasks, self.cfg.default_remind, self.cfg.notifications, self.lang, self.h24());
     }
 
-    pub fn flush(&mut self) {
+    /// Writes tasks and settings if they changed. `false` if something could not be written.
+    pub fn flush(&mut self) -> bool {
+        let mut ok = true;
         if self.data_dirty.take().is_some() {
             if storage::save(&self.dir, &self.data, self.today).is_err() {
                 self.toast_text_now(self.s().save_failed.to_string());
+                ok = false;
             }
             self.backups = storage::list_backups(&self.dir);
         }
-        if self.cfg_dirty.take().is_some() {
-            self.cfg.save_to(&self.dir);
+        if self.cfg_dirty.take().is_some() && !self.cfg.save_to(&self.dir) {
+            ok = false;
         }
+        ok
     }
 
     fn toast_text_now(&mut self, text: String) {
@@ -591,6 +595,18 @@ impl App {
 
 impl eframe::App for App {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if self.updater.is_busy() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(100));
+        }
+        // A self-update has started the new version: flush, remove the tray icon and quit by the normal path.
+        if self.updater.should_exit() && !self.quitting {
+            // Test hook: `PLANORA_TEST_TASK_AT_EXIT=<title>` adds a task right before the exit, to prove that the
+            // exit path flushes unsaved changes (see tasks/selfupdate_live_test.py `--expect-in-data`).
+            if let Ok(title) = std::env::var("PLANORA_TEST_TASK_AT_EXIT") {
+                self.add_task(ctx, Profile::Work, None, &title, None);
+            }
+            self.quit(ctx);
+        }
         self.now = Local::now().naive_local();
         self.today = self.now.date();
         if self.hide_frames > 0 && !bus::pending() {

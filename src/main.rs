@@ -9,6 +9,8 @@ mod i18n;
 mod model;
 #[allow(dead_code)]
 mod nimvoro;
+#[allow(dead_code)]
+mod selfupdate;
 mod notify;
 mod pdf;
 #[cfg(windows)]
@@ -20,6 +22,8 @@ mod strings;
 mod support;
 #[allow(dead_code)]
 mod theme;
+#[allow(dead_code)]
+mod update_ui;
 #[cfg(windows)]
 mod tray;
 #[cfg(not(windows))]
@@ -32,6 +36,7 @@ use eframe::egui;
 pub const REPO_URL: &str = "https://github.com/GrigoryyKach/planora";
 
 fn main() -> eframe::Result<()> {
+    selfupdate::startup("planora");
     if !platform::claim_single_instance() {
         // Another Planora is running (maybe hidden in the tray); it was asked to show its window.
         return Ok(());

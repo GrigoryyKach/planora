@@ -11,6 +11,7 @@ use crate::model::Profile;
 use crate::nimvoro::{self, UpdateState};
 use crate::platform;
 use crate::support;
+use crate::update_ui;
 use crate::theme::{self, Btn, Pal};
 use eframe::egui::{self, Align, Layout, Margin, RichText, ScrollArea, Ui};
 
@@ -229,20 +230,25 @@ impl App {
                     self.cfg.check_updates = v;
                     self.touch_cfg(&ctx);
                 }
-                ui.horizontal(|ui| {
-                    ui.label(RichText::new(self.updater.status_text(self.lang)).font(theme::reg(13.0)).color(p.text2));
-                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        if let UpdateState::Available { .. } = self.updater.state() {
-                            if widgets::btn(ui, u.update_btn, Btn::Primary, p).clicked() && self.updater.apply() {
-                                self.quit(&ctx);
+                if !update_ui::progress(ui, &self.updater, self.lang, p) {
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new(self.updater.status_text(self.lang)).font(theme::reg(13.0)).color(p.text2));
+                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                            if let UpdateState::Available { .. } = self.updater.state() {
+                                if widgets::btn(ui, u.update_btn, Btn::Primary, p).clicked() {
+                                    let saved = self.flush();
+                                    if self.updater.apply_if(saved) {
+                                        self.quit(&ctx);
+                                    }
+                                }
                             }
-                        }
-                        if widgets::btn(ui, u.check_now, Btn::Secondary, p).clicked() {
-                            let c = ctx.clone();
-                            self.updater.check(move || c.request_repaint());
-                        }
+                            if widgets::btn(ui, u.check_now, Btn::Secondary, p).clicked() {
+                                let c = ctx.clone();
+                                self.updater.check(move || c.request_repaint());
+                            }
+                        });
                     });
-                });
+                }
             });
 
             // ── Support the author

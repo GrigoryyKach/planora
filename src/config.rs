@@ -113,9 +113,11 @@ impl Config {
         cfg
     }
 
-    pub fn save_to(&self, dir: &std::path::Path) {
-        if let Ok(json) = serde_json::to_vec_pretty(self) {
-            let _ = write_atomic(&dir.join("config.json"), &json);
+    /// Writes the settings. `false` if they could not be written.
+    pub fn save_to(&self, dir: &std::path::Path) -> bool {
+        match serde_json::to_vec_pretty(self) {
+            Ok(json) => write_atomic(&dir.join("config.json"), &json).is_ok(),
+            Err(_) => false,
         }
     }
 
