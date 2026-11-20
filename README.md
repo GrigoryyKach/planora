@@ -107,7 +107,7 @@ cargo test
 
 Locally the GNU toolchain is used; CI (`.github/workflows/release.yml`) builds with MSVC (Windows job) and on Ubuntu 22.04 (Linux job) when a `vX.Y.Z` tag is pushed and publishes `Planora-win-x64.zip` and `Planora-linux-x64.tar.gz` in one release.
 
-Other tools: `tools/make_icon.py` redraws the icon, `tools/subset_fonts.py` re-subsets the bundled font.
+Other tools: `tools/subset_fonts.py` re-subsets the bundled font.
 
 ## Licence notes
 
