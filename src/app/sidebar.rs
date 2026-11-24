@@ -103,7 +103,7 @@ impl App {
         }
         ui.add_space(16.0);
 
-        let bottom_h = 84.0;
+        let bottom_h = 112.0;
         let h = (ui.available_height() - bottom_h).max(80.0);
         let mut nav: Option<Nav> = None;
         let mut dialog: Option<Dialog> = None;
