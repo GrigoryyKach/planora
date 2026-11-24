@@ -103,7 +103,7 @@ impl App {
         }
         ui.add_space(16.0);
 
-        let bottom_h = 44.0;
+        let bottom_h = 84.0;
         let h = (ui.available_height() - bottom_h).max(80.0);
         let mut nav: Option<Nav> = None;
         let mut dialog: Option<Dialog> = None;
@@ -243,6 +243,12 @@ impl App {
         }
 
         ui.add_space(8.0);
+        // The Trash sits above Settings; its count is the number of items waiting in it.
+        let trash = Row { icon: Some(Icon::Trash), dot: None, label: t.trash, counts: (0, self.data.trash.len()), selected: self.cfg.nav == Nav::Trash, collapsed, draggable: false };
+        if nav_row(ui, p, trash).clicked() {
+            self.go(&ctx, Nav::Trash);
+        }
+        ui.add_space(2.0);
         let cur = self.cfg.nav == Nav::Settings;
         let r = Row { icon: Some(Icon::Gear), dot: None, label: t.settings, counts: (0, 0), selected: cur, collapsed, draggable: false };
         if nav_row(ui, p, r).clicked() {

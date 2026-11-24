@@ -182,6 +182,16 @@ impl App {
 
             // ── Data
             group(ui, p, t.group_data, |ui| {
+                // The Trash: how long deleted tasks wait before they are removed for good.
+                let days: Vec<(u32, String)> = crate::model::trash::RETENTION_OPTIONS.iter().map(|d| (*d, t.days_n.replace("{n}", &d.to_string()))).collect();
+                let refs: Vec<(u32, &str)> = days.iter().map(|(d, s)| (*d, s.as_str())).collect();
+                if let Some(v) = combo_row(ui, p, t.keep_deleted, "trashdays", self.cfg.trash_days, &refs, 150.0) {
+                    // Nothing is purged right now: items older than the new limit go at the next cleanup.
+                    self.cfg.trash_days = v;
+                    self.touch_cfg(&ctx);
+                }
+                theme::hint(ui, t.keep_deleted_hint, p);
+                theme::divider(ui, p);
                 ui.label(RichText::new(self.dir.display().to_string()).font(theme::mono(12.0)).color(p.muted));
                 ui.add_space(8.0);
                 ui.horizontal_wrapped(|ui| {

@@ -133,7 +133,7 @@ impl App {
             }
             let col = if item.done { p.muted } else { p.text };
             let strike = item.done.then(|| Stroke::new(1.0, p.muted));
-            let g = fit_text(ui.painter(), &task.title, theme::reg(14.0), col, rx - x, strike);
+            let g = fit_text(ui.painter(), &self.display_title(task), theme::reg(14.0), col, rx - x, strike);
             ui.painter().galley(pos2(x, cy - g.size().y / 2.0), g, col);
             ui.add_space(4.0);
         }

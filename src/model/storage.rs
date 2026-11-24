@@ -56,11 +56,35 @@ pub fn migrate(mut value: serde_json::Value) -> Result<Data, String> {
                 t.entry("deadline_time").or_insert(serde_json::Value::Null);
             }
         }
-        obj.insert("version".into(), SCHEMA_VERSION.into());
     }
+    // v2 -> v3: subtasks and the Trash. Every task gets an explicit `parent_id: null` (a normal top-level task)
+    // and the file gets an empty `trash`. Nothing else changes.
+    if version < 3 {
+        if let Some(tasks) = obj.get_mut("tasks").and_then(|t| t.as_array_mut()) {
+            for t in tasks.iter_mut().filter_map(|t| t.as_object_mut()) {
+                t.entry("parent_id").or_insert(serde_json::Value::Null);
+            }
+        }
+        obj.entry("trash").or_insert_with(|| serde_json::Value::Array(Vec::new()));
+    }
+    obj.insert("version".into(), SCHEMA_VERSION.into());
     let mut data: Data = serde_json::from_value(value).map_err(|e| e.to_string())?;
     data.version = SCHEMA_VERSION;
+    data.normalize();
     Ok(data)
+}
+
+/// The schema version a data text was written with (0 when it has none or cannot be read).
+pub fn schema_of(text: &str) -> u32 {
+    serde_json::from_str::<serde_json::Value>(text.trim_start_matches('\u{feff}'))
+        .ok()
+        .and_then(|v| v.get("version").and_then(|v| v.as_u64()))
+        .unwrap_or(0) as u32
+}
+
+/// Name of the copy kept of a file written by an older schema, made before the first save in the new one.
+pub fn pre_migration_name(old_version: u32) -> String {
+    format!("before-schema-{SCHEMA_VERSION}-from-v{old_version}.json")
 }
 
 /// Loads `data.json` from `dir`. A broken file is renamed to `data.corrupt-<timestamp>.json`, never overwritten.
@@ -72,7 +96,18 @@ pub fn load(dir: &Path, stamp: &str) -> (Data, LoadOutcome) {
         Err(_) => return (Data::default(), quarantine(&path, dir, stamp)),
     };
     match std::str::from_utf8(&bytes).map_err(|e| e.to_string()).and_then(parse) {
-        Ok(d) => (d, LoadOutcome::Loaded),
+        Ok(d) => {
+            // An older file is upgraded in memory only. Keep its exact bytes in `backups/` before anything is
+            // written in the new schema, so going back to an older Planora loses nothing.
+            if let Ok(text) = std::str::from_utf8(&bytes) {
+                let old = schema_of(text);
+                let copy = dir.join(BACKUP_DIR).join(pre_migration_name(old));
+                if old < SCHEMA_VERSION && !copy.exists() {
+                    let _ = write_atomic(&copy, &bytes);
+                }
+            }
+            (d, LoadOutcome::Loaded)
+        }
         Err(_) => (Data::default(), quarantine(&path, dir, stamp)),
     }
 }
@@ -199,6 +234,83 @@ mod tests {
         // A migrated file round-trips as schema 2.
         let again = parse(&serde_json::to_string(&d).unwrap()).unwrap();
         assert_eq!(again, d);
+    }
+
+    const V2: &str = r#"{
+  "version": 2,
+  "projects": [{"id":"p1","profile":"work","name":"Site","description":"d","color":4286,"archived":false,"created":"2026-11-01T10:00:00"}],
+  "tasks": [
+    {"id":"a","profile":"work","project_id":"p1","title":"Write copy","description":"notes","links":[{"url":"https://example.com","title":"x"}],
+     "status":"in_progress","priority":"high","deadline":"2026-11-20","deadline_time":"17:30:00","scheduled":"2026-11-19","time":"09:00:00",
+     "remind":{"min":15},"recurrence":null,"done_dates":[],"checklist":[{"text":"one","done":true}],
+     "created":"2026-11-01T10:00:00","updated":"2026-11-02T10:00:00","completed_at":null},
+    {"id":"b","profile":"personal","title":"Gym","recurrence":{"kind":"weekly","interval":1,"until":null},"scheduled":"2026-11-02",
+     "done_dates":["2026-11-09"],"created":"2026-11-01T10:00:00","updated":"2026-11-01T10:00:00"}
+  ]
+}"#;
+
+    #[test]
+    fn migrates_v2_to_v3_without_losing_anything() {
+        let d = parse(V2).unwrap();
+        assert_eq!(d.version, SCHEMA_VERSION);
+        assert_eq!(d.tasks.len(), 2);
+        assert!(d.trash.is_empty());
+        let a = &d.tasks[0];
+        assert_eq!(a.parent_id, None);
+        assert_eq!(a.project_id.as_deref(), Some("p1"));
+        assert_eq!(a.title, "Write copy");
+        assert_eq!(a.description, "notes");
+        assert_eq!(a.links.len(), 1);
+        assert_eq!(a.deadline_time, chrono::NaiveTime::from_hms_opt(17, 30, 0));
+        assert_eq!(a.time, chrono::NaiveTime::from_hms_opt(9, 0, 0));
+        assert_eq!(a.remind, crate::model::types::Remind::Min(15));
+        assert_eq!(a.progress(), (1, 1));
+        let b = &d.tasks[1];
+        assert!(b.recurrence.is_some());
+        assert_eq!(b.done_dates.len(), 1);
+        assert_eq!(d.projects[0].name, "Site");
+        // The migrated data round-trips unchanged.
+        assert_eq!(parse(&serde_json::to_string(&d).unwrap()).unwrap(), d);
+    }
+
+    #[test]
+    fn upgrade_keeps_the_old_file_in_backups_before_the_first_save() {
+        let dir = tmp("premigrate");
+        fs::write(dir.join(DATA_FILE), V2).unwrap();
+        let (d, o) = load(&dir, "x");
+        assert_eq!(o, LoadOutcome::Loaded);
+        assert_eq!(d.version, SCHEMA_VERSION);
+        // data.json is still the old text, and an exact copy of it is in backups/.
+        assert_eq!(fs::read_to_string(dir.join(DATA_FILE)).unwrap(), V2);
+        let copy = dir.join(BACKUP_DIR).join(pre_migration_name(2));
+        assert_eq!(fs::read_to_string(&copy).unwrap(), V2);
+        // The first save writes schema 3, and the copy is not overwritten or rotated away.
+        save(&dir, &d, day(11, 24)).unwrap();
+        assert_eq!(schema_of(&fs::read_to_string(dir.join(DATA_FILE)).unwrap()), SCHEMA_VERSION);
+        assert_eq!(fs::read_to_string(&copy).unwrap(), V2);
+        // A second start with a current file makes no new copy.
+        let (_, _) = load(&dir, "y");
+        assert_eq!(fs::read_dir(dir.join(BACKUP_DIR)).unwrap().count(), 2); // the copy and the daily backup
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn trash_and_subtasks_round_trip() {
+        let dir = tmp("trashrt");
+        let mut d = sample();
+        let parent = d.tasks[0].id.clone();
+        d.add_subtask(&parent, "Sub", day(11, 17).and_hms_opt(9, 0, 0).unwrap()).unwrap();
+        let sub = d.subtasks_of(&parent)[0].id.clone();
+        let mut other = Task::new(Profile::Work, "Gone", day(11, 17).and_hms_opt(9, 0, 0).unwrap());
+        other.id = "gone".into();
+        d.tasks.push(other);
+        d.trash_task("gone", day(11, 18).and_hms_opt(8, 0, 0).unwrap());
+        save(&dir, &d, day(11, 18)).unwrap();
+        let (loaded, _) = load(&dir, "x");
+        assert_eq!(loaded, d);
+        assert_eq!(loaded.task(&sub).unwrap().parent_id.as_deref(), Some(parent.as_str()));
+        assert_eq!(loaded.trash.len(), 1);
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]

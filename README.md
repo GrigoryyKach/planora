@@ -9,16 +9,20 @@ A calm, local planner for tasks, projects and your calendar, for Windows and Lin
 - **Two profiles, one calendar.** *Personal* and *Work* each have an Inbox (tasks without a project) and projects. The calendar shows both, and a filter switches between All, Personal and Work.
 - **Month calendar.** Square day cells with chips for planned tasks and deadlines. Only a deadline in the past makes a task overdue (red); a past plan date is just shown muted. Done and cancelled tasks are struck through (done has a green check, cancelled a red cross), today is highlighted. Click a day for its list, click a chip to edit, drag a chip to another day to reschedule it.
 - **Today view.** Today's items, overdue items and what is coming in the next week.
-- **Tasks.** Only the title is required. Optional: description, links (with Open and Copy), status, priority, a deadline and a planned day, each with an optional exact time, a checklist (`2/5` progress), repeat and a reminder.
-- **Projects.** Progress card, colour, archive. Lists have filters (status, priority and deadline as multi-select dropdowns, plus a search box), sorting (manual, deadline, priority, newest) and quick actions on every row: click the status to cycle it, right-click to set status, priority, deadline or plan, to move, duplicate or delete. Deleting offers Undo.
+- **Tasks.** Only the title is required. Optional: description, links (with Open and Copy), status, priority, a deadline and a planned day, each with an optional exact time, a checklist (`2/5` progress), subtasks, repeat and a reminder.
+- **Projects.** Progress card, colour, archive. Lists have filters (status, priority and deadline as multi-select dropdowns, plus a search box), sorting (manual, deadline, priority, newest) and quick actions on every row: click the status to cycle it, right-click to set status, priority, deadline or plan, to move, duplicate, add a subtask or delete. Deleting always asks first and moves the task to the Trash.
+- **Subtasks.** Any task can have subtasks, one level deep. A subtask is a full task: status, priority, plan and deadline with optional times, reminders, notes, links and a checklist. In a list a parent shows a chevron (collapsed by default, the choice is saved) and a progress pill such as `2/5`; open, it shows its subtasks indented under it. The task editor has a Subtasks section: add with Enter (the field keeps focus for the next one), drag to reorder, open a subtask in the same editor, with a breadcrumb back to its parent. "Make subtask of…" and "Convert to task" are in the row menu. A subtask takes its parent's profile and project and moves with it. Finishing the last subtask does not complete the parent (the editor only suggests it); completing a parent with open subtasks asks whether to complete them too. Subtasks with their own date appear in Today and the calendar next to the parent's title ("Write script · Make video"), remind like any task, and are found by search. Subtasks do not repeat.
+- **Delete confirmation and Trash.** Deleting a task or subtask (the trash icon, the row menu, `Delete`) asks first: the modal names the task, says how many subtasks go with it and for how many days it can be restored. Cancel is the default (`Enter`, `Esc`, a click outside); Delete is the red button. Deleted tasks move to the **Trash** in the sidebar, with their subtasks as one group, and stay for 7, 14 or 30 days (Settings, Data). The Trash lists them newest first with where they came from, when they were deleted and how long is left. Restore puts a task back in the same place with everything it had; if its project is gone it goes to the Inbox. A subtask whose parent is gone or still in the Trash comes back as a regular task. Delete permanently and Empty trash ask first. Trashed tasks are invisible everywhere else: lists, Today, the calendar, search, counts, PDF export and reminders. Deleting a project asks what to do with its tasks; "delete" moves them to the Trash.
 - **Repeats.** Daily, weekdays, weekly, monthly (the 31st becomes the last day of shorter months) or every N days, with an optional end date. Completing one occurrence does not complete the series.
 - **Reminders.** A system notification at the plan time and at the deadline time (when they have a time), or 5, 10, 15 or 30 minutes before. One per-task choice applies to both; the default is in Settings. Planora stays in the tray when you close the window, and starts minimised to the tray with the system. Reminders missed while it was off appear once in a "Missed reminders" list. Clicking a notification opens the task.
-- **Export to PDF.** A project, the Inbox, the Today view or a single day (from the day panel) becomes a simple A4 task list: a header, then one task per line with a checkbox and the time. Filters such as "Hide done" are respected. Latin and Cyrillic render correctly.
+- **Export to PDF.** A project, the Inbox, the Today view or a single day (from the day panel) becomes a simple A4 task list: a header, then one task per line with a checkbox and the time, with subtasks indented under their parent. Filters such as "Hide done" are respected. Latin and Cyrillic render correctly.
 - **Search.** `Ctrl+F` searches all tasks by title and description.
 - **Backup.** Autosave, one automatic backup per day (the last 14 are kept), JSON export and import, and restore from the backup list in Settings.
 
-![Project view](assets/screenshots/2.png)
-![Task editor](assets/screenshots/3.png)
+![Project view with an expanded parent task](assets/screenshots/2.png)
+![Task editor with subtasks](assets/screenshots/3.png)
+![Trash](assets/screenshots/5.png)
+![Delete confirmation](assets/screenshots/6.png)
 
 ## Keyboard shortcuts
 
@@ -28,13 +32,13 @@ A calm, local planner for tasks, projects and your calendar, for Windows and Lin
 | `Ctrl+F` | Search |
 | `Ctrl+1` / `Ctrl+2` | Today / Calendar |
 | `PageUp` / `PageDown` | Previous / next month (in the calendar) |
-| `Delete` | Delete the selected task (with Undo) |
+| `Delete` | Delete the selected task (asks first, goes to the Trash) |
 | `Esc` | Close the editor, dialog or picker |
 | `Ctrl+Enter` | Save and close the editor |
 
 ## Navigation
 
-The sidebar is the main navigation: Today, Calendar, each profile's Inbox and projects, and Settings at the bottom. Counts show open tasks, with overdue tasks in red. Drag a project to reorder it within its profile. The collapse button turns the sidebar into an icon rail; Planora remembers the choice.
+The sidebar is the main navigation: Today, Calendar, each profile's Inbox and projects, and the Trash and Settings at the bottom (the Trash shows how many items wait in it). Counts show open tasks, with overdue tasks in red. Drag a project to reorder it within its profile. The collapse button turns the sidebar into an icon rail; Planora remembers the choice.
 
 ## Data and backups
 
@@ -42,11 +46,11 @@ Everything is stored in `%APPDATA%\Planora\` on Windows and `~/.config/Planora/`
 
 | File | Content |
 |---|---|
-| `data.json` | Projects and tasks (versioned schema, migrated on load) |
+| `data.json` | Projects, tasks, subtasks and the Trash (versioned schema, migrated on load) |
 | `config.json` | Settings, window position, last view and filter |
 | `state.json` | The last moment reminders were checked |
 | `backups\data-YYYY-MM-DD.json` | One automatic backup per day, the last 14 are kept |
-| `backups\before-*.json` | A safety copy made before an import or restore |
+| `backups\before-*.json` | A safety copy made before an import or restore, or before the first start with a newer data schema (`before-schema-3-from-v2.json`) |
 
 Writes are atomic (temp file, then rename). If `data.json` cannot be read, it is renamed to `data.corrupt-<timestamp>.json` and never overwritten; Planora starts empty and tells you where the backups are.
 
@@ -94,7 +98,7 @@ English (default), Russian and Ukrainian. The starting language follows the NIMV
 
 ## Settings
 
-Language, theme (system, light, dark), first day of the week and time format (English), start with the system (reflects the real registry value / autostart file), close to tray, notifications, default reminder, profile colours, data tools (open folder, export, import, restore), update check.
+Language, theme (system, light, dark), first day of the week and time format (English), start with the system (reflects the real registry value / autostart file), close to tray, notifications, default reminder, profile colours, how long deleted tasks are kept (7, 14 or 30 days; a shorter period removes older items at the next cleanup, which runs at startup and once a day), data tools (open folder, export, import, restore), update check.
 
 ## Build
 

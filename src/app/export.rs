@@ -40,15 +40,18 @@ impl App {
                     }
                     Scope::Inbox(p) => (t.inbox.to_string(), self.profile_name(*p).to_string()),
                 };
-                let rows: Vec<pdf::Row> = self
-                    .list_rows(scope)
-                    .into_iter()
-                    .map(|x| pdf::Row {
+                // Each task, then its subtasks under it (indented).
+                let mut rows: Vec<pdf::Row> = Vec::new();
+                for x in self.list_rows(scope) {
+                    let row = |x: &crate::model::Task, sub: bool| pdf::Row {
+                        sub,
                         state: row_state(x.is_cancelled(), x.is_closed()),
                         time: x.scheduled.and(x.time).map(|tm| fmt::time_text(tm, self.h24())),
                         title: x.title.clone(),
-                    })
-                    .collect();
+                    };
+                    rows.push(row(x, false));
+                    rows.extend(self.sub_rows(&x.id).into_iter().map(|s| row(s, true)));
+                }
                 let file = match scope {
                     Scope::Inbox(p) => format!("{} - {}", t.inbox, self.profile_name(*p)),
                     Scope::Project(_) => title.clone(),
@@ -61,8 +64,9 @@ impl App {
                     .iter()
                     .filter_map(|i| {
                         let task = self.data.task(&i.task_id)?;
-                        let title = if i.kind == ItemKind::Deadline { format!("{} ({})", task.title, t.pdf_deadline) } else { task.title.clone() };
-                        Some(pdf::Row { state: row_state(task.is_cancelled(), i.done), time: i.time.map(|tm| fmt::time_text(tm, self.h24())), title })
+                        let name = self.display_title(task);
+                        let title = if i.kind == ItemKind::Deadline { format!("{name} ({})", t.pdf_deadline) } else { name };
+                        Some(pdf::Row { sub: false, state: row_state(task.is_cancelled(), i.done), time: i.time.map(|tm| fmt::time_text(tm, self.h24())), title })
                     })
                     .collect();
                 let sub = t.pdf_profile.replace("{p}", self.filter_name());

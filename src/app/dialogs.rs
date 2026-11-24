@@ -25,6 +25,15 @@ pub enum Dialog {
     Search { query: String, focus: bool },
     Project(ProjectForm),
     ConfirmDeleteProject { id: String, move_to_inbox: bool },
+    /// "Delete task?" before anything goes to the Trash.
+    ConfirmDeleteTask { id: String },
+    /// Marking a parent done while subtasks are open: complete them too, or only the parent?
+    ConfirmComplete { id: String },
+    /// Delete one Trash item for good (the Trash entry id).
+    ConfirmPurge { id: String },
+    ConfirmEmptyTrash,
+    /// "Make subtask of…": pick the parent for the task `id`.
+    PickParent { id: String, query: String, focus: bool },
     ConfirmImport(Box<Data>),
     ConfirmRestore(PathBuf),
     Missed(Vec<Reminder>),
@@ -135,6 +144,43 @@ pub(super) fn footer(ui: &mut Ui, _app: &App, p: &Pal, left: Option<&str>, secon
     out
 }
 
+
+/// What was clicked in a destructive confirmation.
+#[derive(Default)]
+pub(super) struct ConfirmOut {
+    pub cancel: bool,
+    pub confirm: bool,
+}
+
+/// Footer of a destructive confirmation. Cancel is the default (accent outline, rightmost, Enter and Escape);
+/// the destructive action sits to its left in the negative colour, so a habitual click on the right is safe.
+pub(super) fn destructive_footer(ui: &mut Ui, p: &Pal, cancel: &str, confirm: &str) -> ConfirmOut {
+    const H: f32 = 36.0;
+    const GAP: f32 = 8.0;
+    let (row, _) = ui.allocate_exact_size(vec2(ui.available_width(), H), Sense::hover());
+    let painter = ui.painter().clone();
+    let width = |label: &str| (painter.layout_no_wrap(label.to_string(), theme::medium(14.0), p.text).size().x + 40.0).max(112.0);
+    let mut out = ConfirmOut::default();
+    let cw = width(cancel);
+    let cancel_rect = Rect::from_min_size(egui::pos2(row.right() - cw, row.top()), vec2(cw, H));
+    if theme::button_at(ui, cancel_rect, ui.scope_id().with(("destructive-cancel", cancel)), cancel, theme::Btn::Secondary, p).clicked() {
+        out.cancel = true;
+    }
+    painter.rect_stroke(cancel_rect, theme::R_CONTROL as f32, Stroke::new(1.5, p.accent), egui::StrokeKind::Inside);
+    let dw = width(confirm);
+    let rect = Rect::from_min_size(egui::pos2(cancel_rect.left() - GAP - dw, row.top()), vec2(dw, H));
+    let id = ui.scope_id().with(("destructive-confirm", confirm));
+    let resp = ui.interact(rect, id, Sense::click());
+    let t = theme::fade(ui, id.with("hover"), resp.hovered());
+    let fill = theme::mix(p.negative, if p.dark { Color32::WHITE } else { Color32::BLACK }, t * 0.14);
+    let text = if p.dark { theme::hex(0x141415) } else { Color32::WHITE };
+    painter.rect_filled(rect, theme::R_CONTROL as f32, fill);
+    painter.text(rect.center(), Align2::CENTER_CENTER, confirm, theme::medium(14.0), text);
+    if resp.on_hover_cursor(CursorIcon::PointingHand).clicked() {
+        out.confirm = true;
+    }
+    out
+}
 
 pub(super) fn color_swatches(ui: &mut Ui, color: &mut u32, p: &Pal) {
     ui.horizontal_wrapped(|ui| {

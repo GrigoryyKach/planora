@@ -2,7 +2,7 @@
 
 use super::list_view::status_name;
 use super::widgets::{self, Icon};
-use super::{below, App, DateTarget};
+use super::{below, App, DateTarget, Dialog};
 use crate::fmt;
 use crate::model::{CheckItem, Link, Priority, Profile, RecKind, Recurrence, Remind, Status};
 use crate::theme::{self, Btn, Pal};
@@ -57,13 +57,42 @@ pub struct Editor {
     dl: TimeField,
     new_link: String,
     new_check: String,
+    new_sub: String,
+    /// The subtask being dragged to a new place.
+    sub_drag: Option<String>,
     focus_title: bool,
+    /// Put the cursor in the "Add subtask" field (set when "Add subtask" was chosen in a menu).
+    pub focus_sub: bool,
 }
 
 impl Editor {
     pub fn new(id: String) -> Self {
-        Editor { id, plan: TimeField::default(), dl: TimeField::default(), new_link: String::new(), new_check: String::new(), focus_title: true }
+        Editor {
+            id,
+            plan: TimeField::default(),
+            dl: TimeField::default(),
+            new_link: String::new(),
+            new_check: String::new(),
+            new_sub: String::new(),
+            sub_drag: None,
+            focus_title: true,
+            focus_sub: false,
+        }
     }
+}
+
+/// One subtask as the editor lists it.
+struct SubRow {
+    id: String,
+    title: String,
+    status: Option<Status>,
+    closed: bool,
+    date: Option<String>,
+}
+
+/// Where a dragged subtask lands: the number of other rows whose centre is above the pointer.
+pub fn drop_index(centres: &[f32], dragged: usize, pointer_y: f32) -> usize {
+    centres.iter().enumerate().filter(|(i, y)| *i != dragged && **y < pointer_y).count()
 }
 
 /// Commits the typed text as a new link. Returns `false` (and changes nothing) for empty input.
@@ -121,13 +150,54 @@ impl App {
         let mut task = orig.clone();
         let mut close = false;
         let mut delete = false;
+        let is_sub = orig.parent_id.is_some();
+        let parent: Option<(String, String)> = self.data.parent_of(&orig).map(|p| (p.id.clone(), p.title.clone()));
+        let subs: Vec<SubRow> = self
+            .data
+            .subtasks_of(&orig.id)
+            .iter()
+            .map(|x| SubRow {
+                id: x.id.clone(),
+                title: x.title.clone(),
+                status: x.status,
+                closed: x.is_closed(),
+                date: x.scheduled.or(x.deadline).map(|d| super::today_view::date_label(self, d)),
+            })
+            .collect();
+        let (sub_done, sub_total) = self.data.subtask_progress(&orig.id);
+        let all_subs_done = self.data.all_subtasks_done(&orig.id) && !orig.is_closed();
+        let mut sub_open: Option<String> = None;
+        let mut sub_cycle: Option<String> = None;
+        let mut sub_delete: Option<String> = None;
+        let mut sub_add: Option<String> = None;
+        let mut sub_move: Option<(String, usize)> = None;
+        let mut open_parent = false;
+        let mut to_task = false;
+        let mut mark_done = false;
+        let mut ask_complete = false;
 
         let h24 = self.h24();
         ed.plan.sync(task.time, h24);
         ed.dl.sync(task.deadline_time, h24);
 
         ui.horizontal(|ui| {
-            theme::section(ui, t.task, p);
+            // A subtask shows a breadcrumb back to its parent instead of the plain "Task" label.
+            match &parent {
+                Some((_, title)) => {
+                    theme::section(ui, t.subtask_of, p);
+                    let w = (ui.available_width() - 90.0).max(60.0);
+                    let r = ui.add_sized(
+                        vec2(w, 28.0),
+                        egui::Label::new(RichText::new(title).font(theme::medium(13.0)).color(p.accent)).truncate().sense(Sense::click()),
+                    );
+                    if r.on_hover_cursor(CursorIcon::PointingHand).clicked() {
+                        open_parent = true;
+                    }
+                }
+                None => {
+                    theme::section(ui, t.task, p);
+                }
+            }
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 if widgets::icon_button(ui, Icon::Close, 30.0, p).on_hover_text(format!("{} (Esc)", t.close)).clicked() {
                     close = true;
@@ -157,7 +227,17 @@ impl App {
             ed.focus_title = false;
             ui.add_space(8.0);
 
-            // Profile and project.
+            // Profile and project. A subtask has the ones of its parent.
+            if is_sub {
+                let place = task.project_id.as_deref().and_then(|id| self.project_name(id)).map(str::to_string).unwrap_or_else(|| format!("{} · {}", self.profile_name(task.profile), t.inbox));
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(place).font(theme::reg(14.0)).color(p.text2));
+                    if widgets::btn(ui, t.convert_to_task, Btn::Link, p).clicked() {
+                        to_task = true;
+                    }
+                });
+                theme::hint(ui, t.sub_location_hint, p);
+            } else {
             ui.horizontal(|ui| {
                 let labels = [t.personal, t.work];
                 let colors = [Some(self.color_of(Profile::Personal)), Some(self.color_of(Profile::Work))];
@@ -180,6 +260,7 @@ impl App {
                     }
                 });
             });
+            }
 
             // Status and priority.
             ui.add_space(20.0);
@@ -188,7 +269,13 @@ impl App {
             let labels: Vec<&str> = Status::ALL.iter().map(|s| status_name(t, Some(*s))).collect();
             let sel = task.status.and_then(|s| Status::ALL.iter().position(|x| *x == s));
             if let Some(n) = widgets::pills(ui, "ed-status", &labels, &[], sel, true, p) {
-                crate::model::calendar::set_status(&mut task, n.map(|i| Status::ALL[i]), self.now);
+                let new = n.map(|i| Status::ALL[i]);
+                // Done on a parent with open subtasks asks first; the status stays as it was meanwhile.
+                if new == Some(Status::Done) && task.status != Some(Status::Done) && task.recurrence.is_none() && sub_total > sub_done {
+                    ask_complete = true;
+                } else {
+                    crate::model::calendar::set_status(&mut task, new, self.now);
+                }
             }
             ui.add_space(8.0);
             theme::section(ui, t.priority_label, p);
@@ -198,6 +285,111 @@ impl App {
             let sel = task.priority.and_then(|s| Priority::ALL.iter().position(|x| *x == s));
             if let Some(n) = widgets::pills(ui, "ed-prio", &labels, &colors, sel, true, p) {
                 task.priority = n.map(|i| Priority::ALL[i]);
+            }
+
+            // Subtasks (a subtask cannot have its own: depth is one level).
+            if !is_sub {
+                ui.add_space(20.0);
+                ui.horizontal(|ui| {
+                    theme::section(ui, t.subtasks, p);
+                    if sub_total > 0 {
+                        theme::meta(ui, &format!("{sub_done}/{sub_total}"), p);
+                    }
+                });
+                ui.add_space(2.0);
+                if all_subs_done {
+                    ui.horizontal_wrapped(|ui| {
+                        theme::hint(ui, t.subtasks_all_done, p);
+                        if widgets::btn(ui, t.mark_done, Btn::Link, p).clicked() {
+                            mark_done = true;
+                        }
+                    });
+                    ui.add_space(4.0);
+                }
+                let mut rects: Vec<(String, egui::Rect)> = Vec::new();
+                for sr in &subs {
+                    let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 34.0), Sense::click());
+                    let hov = theme::fade(ui, resp.id.with("hover"), resp.hovered());
+                    let dragging_this = ed.sub_drag.as_deref() == Some(sr.id.as_str());
+                    ui.painter().rect(
+                        rect,
+                        theme::R_CONTROL as f32,
+                        if dragging_this { p.raised_hi } else { theme::mix(p.card, p.raised, hov) },
+                        Stroke::new(1.0, p.line),
+                        StrokeKind::Inside,
+                    );
+                    let cy = rect.center().y;
+                    // Grip: drag to reorder.
+                    let grip = egui::Rect::from_center_size(egui::pos2(rect.left() + 11.0, cy), vec2(16.0, 28.0));
+                    let gresp = ui.interact(grip, ui.scope_id().with(("sub-grip", &sr.id)), Sense::drag());
+                    for dx in [-2.0, 2.0] {
+                        for dy in [-4.0, 0.0, 4.0] {
+                            ui.painter().circle_filled(grip.center() + vec2(dx, dy), 1.1, if gresp.hovered() || dragging_this { p.text2 } else { p.muted });
+                        }
+                    }
+                    if gresp.drag_started() {
+                        ed.sub_drag = Some(sr.id.clone());
+                    }
+                    gresp.on_hover_cursor(CursorIcon::Grab).on_hover_text(t.drag_to_reorder);
+                    // Status, title, date, delete.
+                    let st = egui::Rect::from_center_size(egui::pos2(rect.left() + 34.0, cy), vec2(24.0, 24.0));
+                    let sresp = ui.interact(st, ui.scope_id().with(("sub-status", &sr.id)), Sense::click());
+                    if sresp.hovered() {
+                        ui.painter().circle_filled(st.center(), 12.0, p.raised_hi);
+                    }
+                    widgets::status_mark(ui.painter(), st.center(), sr.status, sr.closed && sr.status != Some(Status::Cancelled), p);
+                    if sresp.on_hover_cursor(CursorIcon::PointingHand).on_hover_text(t.click_status).clicked() {
+                        sub_cycle = Some(sr.id.clone());
+                    } else if resp.clicked() {
+                        sub_open = Some(sr.id.clone());
+                    }
+                    let del = egui::Rect::from_center_size(egui::pos2(rect.right() - 16.0, cy), vec2(24.0, 24.0));
+                    let dresp = ui.interact(del, ui.scope_id().with(("sub-del", &sr.id)), Sense::click());
+                    if dresp.hovered() {
+                        ui.painter().rect_filled(del, theme::R_CONTROL as f32, p.raised_hi);
+                    }
+                    widgets::icon(ui.painter(), Icon::Trash, del.center(), 14.0, if dresp.hovered() { p.negative } else { p.muted });
+                    if dresp.on_hover_cursor(CursorIcon::PointingHand).on_hover_text(t.delete).clicked() {
+                        sub_delete = Some(sr.id.clone());
+                    }
+                    let mut rx = del.left() - 6.0;
+                    if let Some(d) = &sr.date {
+                        let g = ui.painter().layout_no_wrap(d.clone(), theme::reg(12.0), p.muted);
+                        rx -= g.size().x;
+                        ui.painter().galley(egui::pos2(rx, cy - g.size().y / 2.0), g, p.muted);
+                        rx -= 8.0;
+                    }
+                    let col = if sr.closed { p.muted } else { p.text };
+                    let strike = sr.closed.then(|| Stroke::new(1.0, p.muted));
+                    let g = super::calendar_view::fit_text(ui.painter(), &sr.title, theme::reg(13.5), col, rx - (rect.left() + 52.0), strike);
+                    ui.painter().galley(egui::pos2(rect.left() + 52.0, cy - g.size().y / 2.0), g, col);
+                    rects.push((sr.id.clone(), rect));
+                    ui.add_space(2.0);
+                }
+                // The insertion line while a subtask is dragged; the move happens on release.
+                if let Some(did) = ed.sub_drag.clone() {
+                    ctx.set_cursor_icon(CursorIcon::Grabbing);
+                    if let (Some(pos), Some(di)) = (ctx.input(|i| i.pointer.latest_pos()), rects.iter().position(|r| r.0 == did)) {
+                        let centres: Vec<f32> = rects.iter().map(|r| r.1.center().y).collect();
+                        let to = drop_index(&centres, di, pos.y);
+                        let others: Vec<&egui::Rect> = rects.iter().filter(|r| r.0 != did).map(|r| &r.1).collect();
+                        let y = match others.get(to) {
+                            Some(r) => r.top() - 1.0,
+                            None => others.last().map_or(rects[di].1.top(), |r| r.bottom() + 1.0),
+                        };
+                        ui.painter().hline(rects[0].1.x_range(), y, Stroke::new(2.0, p.accent));
+                        if ctx.input(|i| i.pointer.any_released()) {
+                            sub_move = Some((did.clone(), to));
+                        }
+                    }
+                    if ctx.input(|i| i.pointer.any_released()) {
+                        ed.sub_drag = None;
+                    }
+                }
+                let focus = std::mem::take(&mut ed.focus_sub);
+                if add_row(ui, p, w, t.add_subtask_hint, t.add, &mut ed.new_sub, "ed-new-sub", focus) {
+                    sub_add = Some(std::mem::take(&mut ed.new_sub));
+                }
             }
 
             // Dates.
@@ -211,8 +403,8 @@ impl App {
                 ed.dl.show(ui, &mut task.deadline_time, h24, p);
             });
 
-            // Recurrence.
-            if task.anchor().is_some() {
+            // Recurrence. Subtasks do not repeat (a series inside a parent has no clear meaning).
+            if task.anchor().is_some() && !is_sub {
                 ui.add_space(20.0);
                 theme::section(ui, t.repeat, p);
                 ui.add_space(4.0);
@@ -324,7 +516,7 @@ impl App {
             if let Some(i) = remove_link {
                 task.links.remove(i);
             }
-            if add_row(ui, p, w, t.add_link_hint, t.add, &mut ed.new_link, "ed-new-link") {
+            if add_row(ui, p, w, t.add_link_hint, t.add, &mut ed.new_link, "ed-new-link", false) {
                 commit_link(&mut task.links, &mut ed.new_link);
             }
 
@@ -364,7 +556,7 @@ impl App {
             if let Some(i) = remove_item {
                 task.checklist.remove(i);
             }
-            if add_row(ui, p, w, t.add_item_hint, t.add, &mut ed.new_check, "ed-new-check") {
+            if add_row(ui, p, w, t.add_item_hint, t.add, &mut ed.new_check, "ed-new-check", false) {
                 commit_check(&mut task.checklist, &mut ed.new_check);
             }
 
@@ -388,9 +580,42 @@ impl App {
                 old.updated = now;
             });
         }
+        let id = ed.id.clone();
+        // Actions that change other tasks run after the edits of this one were written.
+        if let Some(sid) = sub_cycle {
+            self.cycle_status(&ctx, &sid);
+        }
+        if let Some((sid, to)) = sub_move {
+            if self.data.move_subtask(&id, &sid, to) {
+                self.touch_data(&ctx);
+            }
+        }
+        if let Some(title) = sub_add.filter(|x| !x.trim().is_empty()) {
+            self.add_subtask(&ctx, &id, &title);
+        }
+        if let Some(sid) = sub_delete {
+            self.ask_delete(&sid);
+        }
+        if mark_done {
+            self.set_status(&ctx, &id, Some(Status::Done));
+        }
+        if ask_complete {
+            self.dialog = Some(Dialog::ConfirmComplete { id: id.clone() });
+        }
+        if to_task {
+            self.convert_to_task(&ctx, &id);
+        }
         if delete {
-            let id = ed.id.clone();
-            self.delete_task(&ctx, &id);
+            self.ask_delete(&id);
+            self.editor = Some(ed);
+        } else if let Some(sid) = sub_open {
+            self.flush();
+            self.open_editor(&sid);
+        } else if open_parent {
+            if let Some((pid, _)) = parent {
+                self.flush();
+                self.open_editor(&pid);
+            }
         } else if close {
             self.flush();
         } else {
@@ -427,7 +652,8 @@ impl App {
 
 /// An "input + Add" row that fits the panel width. Returns `true` when the user asked to add: Add was clicked
 /// or Enter was pressed with non-empty text. The input keeps (or regains) focus afterwards.
-fn add_row(ui: &mut Ui, p: &Pal, width: f32, hint: &str, add_label: &str, text: &mut String, id: &str) -> bool {
+#[allow(clippy::too_many_arguments)]
+fn add_row(ui: &mut Ui, p: &Pal, width: f32, hint: &str, add_label: &str, text: &mut String, id: &str, focus: bool) -> bool {
     let btn_w = ui.painter().layout_no_wrap(add_label.to_string(), theme::medium(14.0), p.text).size().x + 24.0;
     let mut add = false;
     ui.push_id(id, |ui| {
@@ -442,6 +668,9 @@ fn add_row(ui: &mut Ui, p: &Pal, width: f32, hint: &str, add_label: &str, text: 
                     .margin(egui::Margin::symmetric(12, 8))
                     .font(theme::reg(14.0)),
             );
+            if focus {
+                r.request_focus();
+            }
             let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
             let click = widgets::btn_enabled(ui, add_label, Btn::Secondary, !text.trim().is_empty(), p).clicked();
             if (enter || click) && !text.trim().is_empty() {
@@ -486,6 +715,18 @@ mod tests {
         assert!(commit_check(&mut items, &mut input));
         assert_eq!(items.iter().map(|c| c.text.as_str()).collect::<Vec<_>>(), ["First", "Second"]);
         assert!(items.iter().all(|c| !c.done));
+    }
+
+    #[test]
+    fn drop_index_counts_the_other_rows_above_the_pointer() {
+        let centres = [10.0, 50.0, 90.0, 130.0];
+        // Dragging row 0 down past two rows lands at position 2.
+        assert_eq!(drop_index(&centres, 0, 95.0), 2);
+        // Dragging the last row to the top lands at 0.
+        assert_eq!(drop_index(&centres, 3, 0.0), 0);
+        // Staying near its own row keeps it in place.
+        assert_eq!(drop_index(&centres, 1, 52.0), 1);
+        assert_eq!(drop_index(&centres, 2, 1000.0), 3);
     }
 
     #[test]

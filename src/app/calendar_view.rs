@@ -255,9 +255,10 @@ impl App {
                     ctx.set_cursor_icon(if resp.dragged() { CursorIcon::Grabbing } else { CursorIcon::PointingHand });
                 }
                 if !resp.dragged() {
+                    let full = self.display_title(task);
                     let tip = match &ttxt {
-                        Some(tt) => format!("{tt}  {}", task.title),
-                        None => task.title.clone(),
+                        Some(tt) => format!("{tt}  {full}"),
+                        None => full,
                     };
                     resp.on_hover_text(tip);
                 }

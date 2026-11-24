@@ -22,6 +22,14 @@
       "text": "Progress cards, filters by status, priority and deadline, sorting, and quick actions on every row: cycle the status, set dates, move or duplicate."
     },
     {
+      "title": "Subtasks",
+      "text": "Break a task into subtasks, each a full task with its own dates, reminders, notes and checklist. A parent shows a 2/5 progress pill and collapses; drag to reorder, make or unmake a subtask from the menu."
+    },
+    {
+      "title": "Trash and safe delete",
+      "text": "Deleting always asks first. Deleted tasks wait in the Trash for 7, 14 or 30 days and can be restored with everything they had, subtasks included."
+    },
+    {
       "title": "Repeats and checklists",
       "text": "Daily, weekday, weekly, monthly or every N days, with an end date. Completing one repeat keeps the series open. Add checklist items and track 2/5 progress."
     },
@@ -44,7 +52,9 @@
     "assets/screenshots/1.png",
     "assets/screenshots/2.png",
     "assets/screenshots/3.png",
-    "assets/screenshots/4.png"
+    "assets/screenshots/4.png",
+    "assets/screenshots/5.png",
+    "assets/screenshots/6.png"
   ],
   "exe": "Planora.exe",
   "asset": "Planora-win-x64.zip",
@@ -82,6 +92,14 @@
         {
           "title": "Проекты и списки",
           "text": "Карточки с прогрессом, фильтры по статусу, приоритету и дедлайну, сортировка и быстрые действия в каждой строке: смена статуса, даты, перенос, дубликат."
+        },
+        {
+          "title": "Подзадачи",
+          "text": "Разбейте задачу на подзадачи: каждая полноценная задача со своими датами, напоминаниями, заметками и чек-листом. У родителя есть счётчик 2/5 и сворачивание; порядок меняется перетаскиванием, превратить задачу в подзадачу и обратно можно из меню."
+        },
+        {
+          "title": "Корзина и безопасное удаление",
+          "text": "Удаление всегда спрашивает подтверждение. Удалённые задачи лежат в Корзине 7, 14 или 30 дней и восстанавливаются со всем содержимым, включая подзадачи."
         },
         {
           "title": "Повторы и чек-листы",
@@ -123,6 +141,14 @@
         {
           "title": "Проєкти та списки",
           "text": "Картки з прогресом, фільтри за статусом, пріоритетом і дедлайном, сортування та швидкі дії в кожному рядку: зміна статусу, дати, перенесення, дублікат."
+        },
+        {
+          "title": "Підзавдання",
+          "text": "Розбийте завдання на підзавдання: кожне повноцінне завдання зі своїми датами, нагадуваннями, нотатками й чеклістом. Батьківське завдання має лічильник 2/5 і згортання; порядок змінюється перетягуванням, перетворити завдання на підзавдання й навпаки можна з меню."
+        },
+        {
+          "title": "Кошик і безпечне видалення",
+          "text": "Видалення завжди питає підтвердження. Видалені завдання лежать у Кошику 7, 14 або 30 днів і відновлюються з усім умістом, разом з підзавданнями."
         },
         {
           "title": "Повтори та чекліст",

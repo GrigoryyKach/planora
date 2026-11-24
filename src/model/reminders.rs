@@ -60,6 +60,23 @@ fn events(task: &Task, from: NaiveDate, to: NaiveDate) -> Vec<(NaiveDateTime, bo
     out
 }
 
+/// The tasks that can ever remind (they have a plan time or a deadline time), ready for the reminder thread.
+/// A subtask's title gets its parent's title as context ("Write script · Make video"). Trashed tasks are not in
+/// `tasks`, so they never remind.
+pub fn timed_for_reminders(tasks: &[Task]) -> Vec<Task> {
+    tasks
+        .iter()
+        .filter(|t| (t.time.is_some() && t.scheduled.is_some()) || (t.deadline_time.is_some() && t.deadline.is_some()))
+        .map(|t| {
+            let mut t = t.clone();
+            if let Some(parent) = t.parent_id.as_deref().and_then(|p| tasks.iter().find(|x| x.id == p)) {
+                t.title = format!("{} · {}", t.title, parent.title);
+            }
+            t
+        })
+        .collect()
+}
+
 /// Reminders that fire in `(after, upto]`, ordered by time.
 pub fn reminders_between(tasks: &[Task], default_before: u32, after: NaiveDateTime, upto: NaiveDateTime) -> Vec<Reminder> {
     let mut out = Vec::new();
@@ -204,6 +221,20 @@ mod tests {
         assert!(!all[0].deadline && all[1].deadline);
         t.status = Some(Status::Done);
         assert!(reminders_between(&[t], 10, dt(2026, 11, 17, 0, 0), dt(2026, 11, 21, 0, 0)).is_empty());
+    }
+
+    #[test]
+    fn subtasks_remind_like_tasks_with_the_parent_as_context() {
+        let parent = Task::new(Profile::Work, "Make video", dt(2026, 11, 1, 0, 0));
+        let mut sub = timed("Write script", day(2026, 11, 18), 10, 0);
+        sub.parent_id = Some(parent.id.clone());
+        let all = vec![parent.clone(), sub.clone()];
+        let timed_tasks = timed_for_reminders(&all);
+        assert_eq!(timed_tasks.len(), 1);
+        let r = next_reminder(&timed_tasks, 10, dt(2026, 11, 17, 0, 0)).unwrap();
+        assert_eq!(r.task_id, sub.id);
+        assert_eq!(r.title, "Write script · Make video");
+        assert_eq!(r.at, dt(2026, 11, 18, 9, 50));
     }
 
     #[test]

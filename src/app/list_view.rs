@@ -31,7 +31,24 @@ enum RowAct {
     Dup(String),
     Del(String),
     Swap(String, String),
+    ToggleExpand(String),
+    AddSub(String),
+    MakeSub(String),
+    ToTask(String),
 }
+
+/// What a parent row shows about its subtasks.
+#[derive(Clone, Copy)]
+struct Group {
+    done: usize,
+    total: usize,
+    expanded: bool,
+}
+
+/// Row geometry: a subtask row is indented and a little smaller than a task row.
+const ROW_H_TASK: f32 = 40.0;
+const ROW_H_SUB: f32 = 34.0;
+const SUB_INDENT: f32 = 28.0;
 
 fn next_week_start(today: NaiveDate, ws: Weekday) -> NaiveDate {
     let since = (7 + today.weekday().num_days_from_monday() as i64 - ws.num_days_from_monday() as i64) % 7;
@@ -46,9 +63,27 @@ impl App {
         }
     }
 
-    /// The tasks a list shows: scope, active filters and sort order (also used by the PDF export).
+    /// Is any list filter active (so subtasks that match are shown even under a collapsed parent)?
+    fn filtering(&self) -> bool {
+        let f = &self.filter;
+        !f.text.trim().is_empty() || f.status.iter().any(|b| *b) || f.priority.iter().any(|b| *b) || f.deadline.iter().any(|b| *b)
+    }
+
+    /// The subtasks of a parent that a list shows: all of them, or the ones that pass the filters.
+    pub(super) fn sub_rows(&self, parent: &str) -> Vec<&Task> {
+        self.data.subtasks_of(parent).into_iter().filter(|x| self.passes_filter(x)).collect()
+    }
+
+    /// The top-level tasks a list shows: scope, active filters and sort order (also used by the PDF export).
+    /// A parent is listed when it passes the filters or when one of its subtasks does.
     pub(super) fn list_rows(&self, scope: &Scope) -> Vec<&Task> {
-        let mut rows: Vec<&Task> = self.data.tasks.iter().filter(|x| self.scope_matches(scope, x) && self.passes_filter(x)).collect();
+        let mut rows: Vec<&Task> = self
+            .data
+            .tasks
+            .iter()
+            .filter(|x| x.parent_id.is_none() && self.scope_matches(scope, x))
+            .filter(|x| self.passes_filter(x) || (self.data.has_subtasks(&x.id) && !self.sub_rows(&x.id).is_empty()))
+            .collect();
         match self.cfg.sort {
             SortMode::Manual => {}
             SortMode::Deadline => rows.sort_by_key(|x| (x.deadline.is_none(), x.deadline)),
@@ -183,13 +218,30 @@ impl App {
             }
             let ids: Vec<String> = rows.iter().map(|x| x.id.clone()).collect();
             let manual = self.cfg.sort == SortMode::Manual;
+            let filtering = self.filtering();
             let mut act: Option<RowAct> = None;
             self.column_header(ui, p);
             for (i, task) in rows.iter().enumerate() {
                 let prev = if manual && i > 0 { Some(ids[i - 1].clone()) } else { None };
                 let next = if manual { ids.get(i + 1).cloned() } else { None };
-                if let Some(a) = self.task_row(ui, p, task, prev, next) {
+                let all_subs = self.data.subtasks_of(&task.id);
+                let group = (!all_subs.is_empty()).then(|| {
+                    let (done, total) = self.data.subtask_progress(&task.id);
+                    Group { done, total, expanded: self.is_expanded(&task.id) || filtering }
+                });
+                if let Some(a) = self.task_row(ui, p, task, prev, next, group, false) {
                     act = Some(a);
+                }
+                if group.is_some_and(|g| g.expanded) {
+                    let subs = self.sub_rows(&task.id);
+                    let sub_ids: Vec<String> = subs.iter().map(|x| x.id.clone()).collect();
+                    for (j, sub) in subs.iter().enumerate() {
+                        let prev = if j > 0 { Some(sub_ids[j - 1].clone()) } else { None };
+                        let next = sub_ids.get(j + 1).cloned();
+                        if let Some(a) = self.task_row(ui, p, sub, prev, next, None, true) {
+                            act = Some(a);
+                        }
+                    }
                 }
             }
             ui.add_space(10.0);
@@ -203,10 +255,7 @@ impl App {
         match a {
             RowAct::Open(id) => self.open_editor(&id),
             RowAct::Cycle(id) => self.cycle_status(ctx, &id),
-            RowAct::Status(id, s) => {
-                let now = self.now;
-                self.edit_task(ctx, &id, |t| crate::model::calendar::set_status(t, s, now));
-            }
+            RowAct::Status(id, s) => self.set_status(ctx, &id, s),
             RowAct::Prio(id, p) => self.set_priority(ctx, &id, p),
             RowAct::Deadline(id, d) => self.edit_task(ctx, &id, |t| t.deadline = d),
             RowAct::Sched(id, d) => self.edit_task(ctx, &id, |t| t.scheduled = d),
@@ -217,8 +266,17 @@ impl App {
             }
             RowAct::MoveTo(id, profile, project) => self.move_task_to(ctx, &id, profile, project),
             RowAct::Dup(id) => self.duplicate_task(ctx, &id),
-            RowAct::Del(id) => self.delete_task(ctx, &id),
+            RowAct::Del(id) => self.ask_delete(&id),
             RowAct::Swap(a, b) => self.move_task(ctx, &a, &b),
+            RowAct::ToggleExpand(id) => self.toggle_expanded(ctx, &id),
+            RowAct::AddSub(id) => {
+                self.open_editor(&id);
+                if let Some(ed) = &mut self.editor {
+                    ed.focus_sub = true;
+                }
+            }
+            RowAct::MakeSub(id) => self.dialog = Some(Dialog::PickParent { id, query: String::new(), focus: true }),
+            RowAct::ToTask(id) => self.convert_to_task(ctx, &id),
         }
     }
 
@@ -226,7 +284,8 @@ impl App {
     fn project_card(&mut self, ui: &mut Ui, p: &Pal, id: &str, wide: bool) -> Option<String> {
         let t = self.s();
         let pr = self.data.project(id)?.clone();
-        let tasks: Vec<&Task> = self.data.tasks.iter().filter(|x| x.project_id.as_deref() == Some(id)).collect();
+        // Top-level tasks only: a parent stands for its subtasks, so counting both would count the same work twice.
+        let tasks: Vec<&Task> = self.data.tasks.iter().filter(|x| x.parent_id.is_none() && x.project_id.as_deref() == Some(id)).collect();
         let total = tasks.iter().filter(|x| x.status != Some(Status::Cancelled)).count();
         let done = tasks.iter().filter(|x| x.status == Some(Status::Done)).count();
         let share = if total == 0 { 0.0 } else { done as f32 / total as f32 };
@@ -361,10 +420,18 @@ impl App {
     }
 
     #[allow(clippy::too_many_lines)]
-    fn task_row(&self, ui: &mut Ui, p: &Pal, task: &Task, prev: Option<String>, next: Option<String>) -> Option<RowAct> {
+    fn task_row(&self, ui: &mut Ui, p: &Pal, task: &Task, prev: Option<String>, next: Option<String>, group: Option<Group>, sub: bool) -> Option<RowAct> {
         let t = self.s();
         let mut act: Option<RowAct> = None;
-        let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 40.0), Sense::click());
+        let row_h = if sub { ROW_H_SUB } else { ROW_H_TASK };
+        let (full, resp) = ui.allocate_exact_size(vec2(ui.available_width(), row_h), Sense::click());
+        // A subtask row is the same design, indented and a little smaller, joined to its parent by a thin elbow.
+        let rect = if sub { Rect::from_min_max(pos2(full.left() + SUB_INDENT, full.top()), full.max) } else { full };
+        if sub {
+            let x = full.left() + SUB_INDENT / 2.0;
+            ui.painter().vline(x, full.top() - 4.0..=rect.center().y, Stroke::new(1.0, p.line_hi));
+            ui.painter().hline(x..=rect.left(), rect.center().y, Stroke::new(1.0, p.line_hi));
+        }
         let hov = theme::fade(ui, resp.id.with("hover"), resp.hovered());
         let selected = self.selected.as_deref() == Some(&task.id) || self.editor.as_ref().is_some_and(|e| e.id == task.id);
         let occ = crate::model::calendar::current_occurrence(task, self.today);
@@ -380,26 +447,57 @@ impl App {
         let cols = columns(rect.width());
         let right = rect.right() - 16.0;
 
+        // Chevron of a parent: shows or hides its subtasks (collapsed by default, the choice is saved).
+        let mut chevron_hit = false;
+        if let Some(g) = group {
+            let cr = Rect::from_center_size(pos2(rect.left() + 8.0, cy), vec2(14.0, 28.0));
+            let cresp = ui.interact(cr, ui.scope_id().with(("chevron", &task.id)), Sense::click());
+            let col = theme::mix(p.muted, p.text, theme::fade(ui, cresp.id.with("hover"), cresp.hovered()));
+            theme::icon_chevron(ui.painter(), cr.center(), col, g.expanded);
+            if cresp.on_hover_cursor(CursorIcon::PointingHand).on_hover_text(if g.expanded { t.hide_subtasks } else { t.show_subtasks }).clicked() {
+                act = Some(RowAct::ToggleExpand(task.id.clone()));
+                chevron_hit = true;
+            }
+        }
+
         // Status button (separate hit area on top of the row).
-        let sr = Rect::from_center_size(pos2(rect.left() + 28.0, cy), vec2(28.0, 28.0));
+        let sr = Rect::from_center_size(pos2(rect.left() + 29.0, cy), vec2(26.0, 26.0));
         let sresp = ui.interact(sr, ui.scope_id().with(("status", &task.id)), Sense::click());
         if sresp.hovered() {
-            ui.painter().circle_filled(sr.center(), 14.0, p.raised_hi);
+            ui.painter().circle_filled(sr.center(), 13.0, p.raised_hi);
         }
         widgets::status_mark(ui.painter(), sr.center(), task.status, done, p);
         if sresp.on_hover_cursor(CursorIcon::PointingHand).on_hover_text(t.click_status).clicked() {
             act = Some(RowAct::Cycle(task.id.clone()));
-        } else if resp.clicked() {
+        } else if resp.clicked() && !chevron_hit {
             act = Some(RowAct::Open(task.id.clone()));
         }
 
-        // Title.
+        // Title, and the progress pill of a parent ("2/5" subtasks done) right after it.
         let x = rect.left() + 52.0;
         let tcol = if muted { p.muted } else { p.text };
         let strike = muted.then(|| Stroke::new(1.0, p.muted));
         let title_right = right - cols.sched_x - 8.0;
-        let g = fit_text(ui.painter(), &task.title, theme::reg(14.0), tcol, title_right - x, strike);
+        let pill = group.map(|g| {
+            let text = format!("{}/{}", g.done, g.total);
+            let gl = ui.painter().layout_no_wrap(text, theme::mono(11.5), if g.total > 0 && g.done == g.total { p.positive } else { p.text2 });
+            (gl.size().x + 14.0, gl)
+        });
+        let pill_w = pill.as_ref().map_or(0.0, |(w, _)| w + 8.0);
+        let font = if sub { theme::reg(13.5) } else { theme::reg(14.0) };
+        let g = fit_text(ui.painter(), &task.title, font, tcol, title_right - x - pill_w, strike);
+        let title_w = g.size().x;
         ui.painter().galley(pos2(x, cy - g.size().y / 2.0), g, tcol);
+        if let (Some((w, gl)), Some(grp)) = (pill, group) {
+            let pr = Rect::from_min_size(pos2(x + title_w + 8.0, cy - 10.0), vec2(w, 20.0));
+            let presp = ui.interact(pr, ui.scope_id().with(("pill", &task.id)), Sense::click());
+            let fill = if presp.hovered() { p.raised_hi } else { p.raised };
+            ui.painter().rect_filled(pr, 10.0, fill);
+            ui.painter().galley(pos2(pr.left() + 7.0, pr.center().y - gl.size().y / 2.0), gl, p.text2);
+            if presp.on_hover_cursor(CursorIcon::PointingHand).on_hover_text(if grp.expanded { t.hide_subtasks } else { t.show_subtasks }).clicked() {
+                act = Some(RowAct::ToggleExpand(task.id.clone()));
+            }
+        }
 
         // Columns.
         let font = theme::reg(12.0);
@@ -506,21 +604,45 @@ impl App {
                     }
                 });
             }
-            ui.menu_button(t.move_to, |ui| {
-                for profile in Profile::ALL {
-                    let pname = self.profile_name(profile);
-                    if ui.button(format!("{pname} · {}", t.inbox)).clicked() {
-                        act = Some(RowAct::MoveTo(id.clone(), profile, None));
-                        ui.close();
-                    }
-                    for pr in self.data.projects.iter().filter(|x| x.profile == profile && !x.archived) {
-                        if ui.button(format!("{pname} · {}", pr.name)).clicked() {
-                            act = Some(RowAct::MoveTo(id.clone(), profile, Some(pr.id.clone())));
+            // A subtask lives where its parent lives, so only a top-level task can be moved.
+            if !sub {
+                ui.menu_button(t.move_to, |ui| {
+                    for profile in Profile::ALL {
+                        let pname = self.profile_name(profile);
+                        if ui.button(format!("{pname} · {}", t.inbox)).clicked() {
+                            act = Some(RowAct::MoveTo(id.clone(), profile, None));
                             ui.close();
                         }
+                        for pr in self.data.projects.iter().filter(|x| x.profile == profile && !x.archived) {
+                            if ui.button(format!("{pname} · {}", pr.name)).clicked() {
+                                act = Some(RowAct::MoveTo(id.clone(), profile, Some(pr.id.clone())));
+                                ui.close();
+                            }
+                        }
                     }
+                });
+                if ui.button(t.add_subtask).clicked() {
+                    act = Some(RowAct::AddSub(id.clone()));
+                    ui.close();
                 }
-            });
+                let blocked = if task.recurrence.is_some() {
+                    Some(t.no_subtask_recurring)
+                } else if self.data.has_subtasks(&task.id) {
+                    Some(t.no_subtask_has_subtasks)
+                } else {
+                    None
+                };
+                let r = ui.add_enabled(blocked.is_none(), egui::Button::new(t.make_subtask));
+                if let Some(why) = blocked {
+                    r.on_disabled_hover_text(why);
+                } else if r.clicked() {
+                    act = Some(RowAct::MakeSub(id.clone()));
+                    ui.close();
+                }
+            } else if ui.button(t.convert_to_task).clicked() {
+                act = Some(RowAct::ToTask(id.clone()));
+                ui.close();
+            }
             ui.separator();
             if let Some(pv) = &prev {
                 if ui.button(t.move_up).clicked() {
@@ -543,7 +665,7 @@ impl App {
                 ui.close();
             }
         });
-        ui.add_space(4.0);
+        ui.add_space(if sub { 3.0 } else { 4.0 });
         act
     }
 }

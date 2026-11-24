@@ -11,7 +11,7 @@ use crate::bus::{self, Cmd};
 use crate::config::{Config, Nav, State, Window};
 use crate::i18n::{self, Lang};
 use crate::model::calendar::{self, ItemKind};
-use crate::model::reminders::{missed_reminders, Reminder};
+use crate::model::reminders::{missed_reminders, timed_for_reminders, Reminder};
 use crate::model::storage::{self, LoadOutcome};
 use crate::model::{new_id, Data, Priority, Profile, ProfileFilter, Project, Status, Task};
 use crate::nimvoro::Updater;
@@ -31,6 +31,7 @@ mod overlays;
 mod settings_view;
 mod sidebar;
 mod today_view;
+mod trash;
 pub mod widgets;
 
 pub use dialogs::Dialog;
@@ -71,8 +72,12 @@ pub struct Drag {
 }
 
 pub enum Undo {
-    Delete { task: Box<Task>, index: usize },
+    /// Takes the trashed task (by its Trash entry) back to where it was.
+    Trash { entry: String },
 }
+
+/// How long the "moved to Trash" toast with Undo stays.
+const TRASH_TOAST_SECS: f64 = 5.0;
 
 pub struct Toast {
     pub text: String,
@@ -126,6 +131,8 @@ pub struct App {
     last_nav: Nav,
     /// Frames left in which a `--minimized` start keeps the window hidden (the runtime shows it after the first paint).
     hide_frames: u8,
+    /// The day the Trash was last purged (it runs at startup and once a day).
+    last_purge: NaiveDate,
 }
 
 impl App {
@@ -143,7 +150,15 @@ impl App {
             cfg_dirty = Some(0.0);
         }
         let now = Local::now().naive_local();
-        let (data, outcome) = storage::load(&dir, &now.format("%Y%m%d-%H%M%S").to_string());
+        let (mut data, outcome) = storage::load(&dir, &now.format("%Y%m%d-%H%M%S").to_string());
+        // Items that outstayed the retention period go at startup (and once a day while the app runs).
+        let purged = data.purge_expired(now, cfg.trash_days) > 0;
+        // Only parents that still have subtasks keep an "expanded" mark.
+        let before = cfg.expanded.len();
+        cfg.expanded.retain(|id| data.has_subtasks(id));
+        if cfg.expanded.len() != before {
+            cfg_dirty = Some(0.0);
+        }
         bus::init(cc.egui_ctx.clone());
 
         // The toast icon must be a real file.
@@ -156,7 +171,7 @@ impl App {
 
         let state = State::load_from(&dir);
         let missed: Vec<Reminder> = match state.last_tick {
-            Some(last) if cfg.notifications => missed_reminders(&data.tasks, cfg.default_remind, last, now, 14),
+            Some(last) if cfg.notifications => missed_reminders(&timed_for_reminders(&data.tasks), cfg.default_remind, last, now, 14),
             _ => Vec::new(),
         };
         let worker = Worker::start(dir.clone(), icon_path, lang);
@@ -221,8 +236,9 @@ impl App {
             editor_rect: None,
             editor_touched: false,
             modal_was_open: false,
-            data_dirty: None,
+            data_dirty: purged.then_some(0.0),
             cfg_dirty,
+            last_purge: today,
             quitting: false,
             last_nav,
             hide_frames: if start_hidden { 4 } else { 0 },
@@ -312,50 +328,100 @@ impl App {
             if t.scheduled.is_none() {
                 t.time = None;
             }
+            // A subtask lives where its parent lives: when a parent moved, its subtasks follow.
+            if t.parent_id.is_none() {
+                self.data.sync_children(id);
+            }
             self.touch_data(ctx);
         }
     }
 
+    /// Asks before deleting (the confirmation modal); nothing is removed until the user agrees.
+    pub fn ask_delete(&mut self, id: &str) {
+        if self.data.task(id).is_some() {
+            self.dialog = Some(Dialog::ConfirmDeleteTask { id: id.to_string() });
+        }
+    }
+
+    /// Moves the task (and its subtasks) to the Trash. Call it only after the user confirmed.
     pub fn delete_task(&mut self, ctx: &egui::Context, id: &str) {
-        let Some(index) = self.data.tasks.iter().position(|t| t.id == id) else { return };
-        let task = self.data.tasks.remove(index);
-        if self.editor.as_ref().is_some_and(|e| e.id == id) {
+        let mut gone: Vec<String> = self.data.subtasks_of(id).iter().map(|t| t.id.clone()).collect();
+        gone.push(id.to_string());
+        if self.data.trash_task(id, self.now) == 0 {
+            return;
+        }
+        if self.editor.as_ref().is_some_and(|e| gone.contains(&e.id)) {
             self.editor = None;
         }
-        if self.selected.as_deref() == Some(id) {
+        if self.selected.as_ref().is_some_and(|s| gone.contains(s)) {
             self.selected = None;
         }
         let now = ctx.input(|i| i.time);
-        self.toast = Some(Toast { text: self.s().task_deleted.to_string(), undo: Some(Undo::Delete { task: Box::new(task), index }), until: now + 8.0 });
+        self.toast = Some(Toast { text: self.s().task_trashed.to_string(), undo: Some(Undo::Trash { entry: id.to_string() }), until: now + TRASH_TOAST_SECS });
         self.touch_data(ctx);
     }
 
     pub fn undo(&mut self, ctx: &egui::Context) {
-        if let Some(Toast { undo: Some(Undo::Delete { task, index }), .. }) = self.toast.take() {
-            let i = index.min(self.data.tasks.len());
-            self.data.tasks.insert(i, *task);
+        if let Some(Toast { undo: Some(Undo::Trash { entry }), .. }) = self.toast.take() {
+            if self.data.restore_from_trash(&entry).is_some() {
+                self.touch_data(ctx);
+            }
+        }
+    }
+
+    /// Restores an item of the Trash and says what happened when it could not go back exactly where it was.
+    pub fn restore_trashed(&mut self, ctx: &egui::Context, entry: &str) {
+        let Some(r) = self.data.restore_from_trash(entry) else { return };
+        let t = self.s();
+        let text = if r.project_missing {
+            t.restored_inbox
+        } else if r.detached {
+            t.restored_detached
+        } else {
+            t.restored
+        };
+        self.touch_data(ctx);
+        self.notify(ctx, text.to_string());
+    }
+
+    /// Removes what outstayed the retention period. Runs at startup and once a day.
+    pub fn purge_trash(&mut self, ctx: &egui::Context) {
+        if self.data.purge_expired(self.now, self.cfg.trash_days) > 0 {
             self.touch_data(ctx);
         }
     }
 
     pub fn duplicate_task(&mut self, ctx: &egui::Context, id: &str) {
         let Some(index) = self.data.tasks.iter().position(|t| t.id == id) else { return };
-        let mut copy = self.data.tasks[index].clone();
-        copy.id = new_id();
-        copy.created = self.now;
-        copy.updated = self.now;
-        copy.completed_at = None;
-        copy.status = None;
-        copy.done_dates.clear();
-        for c in &mut copy.checklist {
-            c.done = false;
-        }
+        let copy_of = |t: &Task, now: NaiveDateTime| {
+            let mut copy = t.clone();
+            copy.id = new_id();
+            copy.created = now;
+            copy.updated = now;
+            copy.completed_at = None;
+            copy.status = None;
+            copy.done_dates.clear();
+            for c in &mut copy.checklist {
+                c.done = false;
+            }
+            copy
+        };
+        let mut copy = copy_of(&self.data.tasks[index], self.now);
         copy.title = format!("{} {}", copy.title, self.s().copy_suffix);
-        self.data.tasks.insert(index + 1, copy);
+        // A parent is copied with its subtasks; a subtask is copied next to its siblings.
+        let subs: Vec<Task> = self.data.subtasks_of(id).into_iter().map(|t| copy_of(t, self.now)).collect();
+        let at = (index + 1 + if copy.parent_id.is_none() { self.data.subtasks_of(id).len() } else { 0 }).min(self.data.tasks.len());
+        let new_parent = copy.id.clone();
+        self.data.tasks.insert(at, copy);
+        for (i, mut sub) in subs.into_iter().enumerate() {
+            sub.parent_id = Some(new_parent.clone());
+            self.data.tasks.insert(at + 1 + i, sub);
+        }
         self.touch_data(ctx);
     }
 
-    /// Moves a task one step up or down among the tasks shown (manual sort order).
+    /// Swaps a task with its neighbour in the manual order (neighbours are siblings: top-level with top-level,
+    /// subtask with subtask of the same parent).
     pub fn move_task(&mut self, ctx: &egui::Context, id: &str, neighbour: &str) {
         let (Some(a), Some(b)) = (
             self.data.tasks.iter().position(|t| t.id == id),
@@ -367,15 +433,35 @@ impl App {
         self.touch_data(ctx);
     }
 
-    /// Moves a task to another profile/project.
+    /// Moves a task to another profile/project. Its subtasks go with it; a subtask cannot be moved on its own.
     pub fn move_task_to(&mut self, ctx: &egui::Context, id: &str, profile: Profile, project: Option<String>) {
-        self.edit_task(ctx, id, |t| {
-            t.profile = profile;
-            t.project_id = project;
-        });
+        if self.data.set_location(id, profile, project, self.now) {
+            self.touch_data(ctx);
+        }
+    }
+
+    /// Would marking this task done leave open subtasks behind? Then the user is asked first.
+    fn ask_complete(&mut self, id: &str) -> bool {
+        let needs = self.data.task(id).is_some_and(|t| t.recurrence.is_none() && t.status != Some(Status::Done)) && self.data.open_subtask_count(id) > 0;
+        if needs {
+            self.dialog = Some(Dialog::ConfirmComplete { id: id.to_string() });
+        }
+        needs
+    }
+
+    /// Sets the status; marking a parent done while subtasks are open opens the question instead.
+    pub fn set_status(&mut self, ctx: &egui::Context, id: &str, status: Option<Status>) {
+        if status == Some(Status::Done) && self.ask_complete(id) {
+            return;
+        }
+        let now = self.now;
+        self.edit_task(ctx, id, |t| calendar::set_status(t, status, now));
     }
 
     pub fn toggle_done(&mut self, ctx: &egui::Context, id: &str, occ: Option<NaiveDate>) {
+        if self.ask_complete(id) {
+            return;
+        }
         let now = self.now;
         if let Some(t) = self.data.task_mut(id) {
             calendar::toggle_done(t, occ, now);
@@ -386,6 +472,10 @@ impl App {
     pub fn cycle_status(&mut self, ctx: &egui::Context, id: &str) {
         let today = self.today;
         let now = self.now;
+        let Some(t) = self.data.task(id) else { return };
+        if t.recurrence.is_none() && Status::cycle(t.status) == Some(Status::Done) && self.ask_complete(id) {
+            return;
+        }
         let Some(t) = self.data.task_mut(id) else { return };
         if t.recurrence.is_some() {
             let occ = calendar::current_occurrence(t, today);
@@ -401,6 +491,50 @@ impl App {
         self.edit_task(ctx, id, |t| t.priority = p);
     }
 
+    pub fn add_subtask(&mut self, ctx: &egui::Context, parent: &str, title: &str) -> Option<String> {
+        let id = self.data.add_subtask(parent, title.trim(), self.now)?;
+        self.touch_data(ctx);
+        Some(id)
+    }
+
+    pub fn make_subtask(&mut self, ctx: &egui::Context, id: &str, parent: &str) {
+        use crate::model::tree::SubtaskError;
+        let t = self.s();
+        match self.data.make_subtask(id, parent, self.now) {
+            Ok(()) => self.touch_data(ctx),
+            Err(SubtaskError::Recurring) => self.notify(ctx, t.no_subtask_recurring.to_string()),
+            Err(SubtaskError::HasSubtasks | SubtaskError::ParentIsSubtask) => self.notify(ctx, t.no_subtask_has_subtasks.to_string()),
+            Err(_) => {}
+        }
+    }
+
+    pub fn convert_to_task(&mut self, ctx: &egui::Context, id: &str) {
+        if self.data.convert_to_task(id, self.now) {
+            self.touch_data(ctx);
+        }
+    }
+
+    pub fn is_expanded(&self, id: &str) -> bool {
+        self.cfg.expanded.iter().any(|x| x == id)
+    }
+
+    pub fn toggle_expanded(&mut self, ctx: &egui::Context, id: &str) {
+        if let Some(i) = self.cfg.expanded.iter().position(|x| x == id) {
+            self.cfg.expanded.remove(i);
+        } else {
+            self.cfg.expanded.push(id.to_string());
+        }
+        self.touch_cfg(ctx);
+    }
+
+    /// The title with its parent as context for planned views: "Write script · Make video".
+    pub fn display_title(&self, task: &Task) -> String {
+        match self.data.parent_of(task) {
+            Some(p) => format!("{} · {}", task.title, p.title),
+            None => task.title.clone(),
+        }
+    }
+
     pub fn open_editor(&mut self, id: &str) {
         if self.data.task(id).is_some() {
             self.editor = Some(editor::Editor::new(id.to_string()));
@@ -412,7 +546,7 @@ impl App {
 
     pub fn go(&mut self, ctx: &egui::Context, nav: Nav) {
         if self.cfg.nav != nav {
-            if nav == Nav::Settings {
+            if matches!(nav, Nav::Settings | Nav::Trash) {
                 self.editor = None;
             }
             self.cfg.nav = nav;
@@ -457,9 +591,14 @@ impl App {
             .count()
     }
 
-    /// Open (not closed) tasks of a project, or of the inbox.
+    /// Open (not closed) tasks of a project, or of the inbox. Subtasks are not counted on their own: a parent
+    /// stands for its whole group, so counting both would count the same work twice.
     pub fn open_count(&self, profile: Profile, project: Option<&str>) -> usize {
-        self.data.tasks.iter().filter(|t| t.profile == profile && t.project_id.as_deref() == project && !t.is_closed()).count()
+        self.data
+            .tasks
+            .iter()
+            .filter(|t| t.parent_id.is_none() && t.profile == profile && t.project_id.as_deref() == project && !t.is_closed())
+            .count()
     }
 
     fn handle_commands(&mut self, ctx: &egui::Context) {
@@ -551,7 +690,7 @@ impl App {
             }
             if ctx.input_mut(|i| i.consume_key(none, Key::Delete)) {
                 if let Some(id) = self.selected.clone() {
-                    self.delete_task(ctx, &id);
+                    self.ask_delete(&id);
                 }
             }
         }
@@ -609,6 +748,10 @@ impl eframe::App for App {
         }
         self.now = Local::now().naive_local();
         self.today = self.now.date();
+        if self.today != self.last_purge {
+            self.last_purge = self.today;
+            self.purge_trash(ctx);
+        }
         if self.hide_frames > 0 && !bus::pending() {
             self.hide_frames -= 1;
             platform::hide_main_window();
@@ -686,6 +829,7 @@ impl eframe::App for App {
                 Nav::Calendar => self.calendar_view(&mut cui, &p),
                 Nav::Inbox(profile) => self.list_view(&mut cui, &p, list_view::Scope::Inbox(profile)),
                 Nav::Project(id) => self.list_view(&mut cui, &p, list_view::Scope::Project(id)),
+                Nav::Trash => self.trash_view(&mut cui, &p),
                 Nav::Settings => self.settings_view(&mut cui, &p),
             }
         }

@@ -18,6 +18,11 @@ impl App {
             Dialog::Search { query, focus } => self.search(ctx, p, query, focus),
             Dialog::Project(f) => self.project_dialog(ctx, p, f),
             Dialog::ConfirmDeleteProject { id, move_to_inbox } => self.confirm_delete_project(ctx, p, id, move_to_inbox),
+            Dialog::ConfirmDeleteTask { id } => self.confirm_delete_task(ctx, p, id),
+            Dialog::ConfirmComplete { id } => self.confirm_complete(ctx, p, id),
+            Dialog::ConfirmPurge { id } => self.confirm_purge(ctx, p, id),
+            Dialog::ConfirmEmptyTrash => self.confirm_empty_trash(ctx, p),
+            Dialog::PickParent { id, query, focus } => self.pick_parent(ctx, p, id, query, focus),
             Dialog::ConfirmImport(data) => self.confirm_replace(ctx, p, *data, None),
             Dialog::ConfirmRestore(path) => self.confirm_restore(ctx, p, path),
             Dialog::Missed(list) => self.missed_dialog(ctx, p, list),
@@ -124,11 +129,7 @@ impl App {
         let t = self.s();
         let mut open: Option<String> = None;
         let q = query.trim().to_lowercase();
-        let mut hits: Vec<&crate::model::Task> = if q.is_empty() {
-            Vec::new()
-        } else {
-            self.data.tasks.iter().filter(|x| x.title.to_lowercase().contains(&q) || x.description.to_lowercase().contains(&q)).collect()
-        };
+        let mut hits: Vec<&crate::model::Task> = self.data.search(&query);
         hits.sort_by_key(|x| x.is_closed());
         let total = hits.len();
         hits.truncate(40);
@@ -170,7 +171,7 @@ impl App {
                             rx -= 12.0;
                         }
                         let col = if task.is_closed() { p.muted } else { p.text };
-                        let g = super::calendar_view::fit_text(ui.painter(), &task.title, theme::reg(14.0), col, rx - rect.left() - 44.0, None);
+                        let g = super::calendar_view::fit_text(ui.painter(), &self.display_title(task), theme::reg(14.0), col, rx - rect.left() - 44.0, None);
                         ui.painter().galley(pos2(rect.left() + 38.0, rect.center().y - g.size().y / 2.0), g, col);
                         if resp.on_hover_cursor(CursorIcon::PointingHand).clicked() {
                             open = Some(task.id.clone());
@@ -274,11 +275,16 @@ impl App {
         let t = self.s();
         let pr = self.data.project(&id).cloned()?;
         let count = self.data.tasks.iter().filter(|x| x.project_id.as_deref() == Some(&id)).count();
+        let days = self.cfg.trash_days;
         let (mut close, mut confirm) = (false, false);
         let backdrop = modal(ctx, p, "del-project", 440.0, |ui: &mut Ui| {
             ui.label(RichText::new(t.delete_project_q.replace("{name}", &pr.name)).font(theme::medium(18.0)).color(p.text));
             ui.add_space(6.0);
             theme::hint(ui, &crate::i18n::plural(self.lang, count, &t.tasks_plural), p);
+            if count > 0 && !to_inbox {
+                ui.add_space(2.0);
+                theme::hint(ui, &t.trash_note_many.replace("{n}", &days.to_string()), p);
+            }
             if count > 0 {
                 ui.add_space(10.0);
                 if ui.radio(to_inbox, RichText::new(t.move_to_inbox).font(theme::reg(14.0))).clicked() {
@@ -299,7 +305,8 @@ impl App {
                     task.project_id = None;
                 }
             } else {
-                self.data.tasks.retain(|x| x.project_id.as_deref() != Some(&id));
+                // The tasks go to the Trash like any deleted task (their project is gone, so a restore puts them in the Inbox).
+                self.data.trash_project_tasks(&id, self.now);
             }
             self.data.projects.retain(|x| x.id != id);
             if self.cfg.nav == Nav::Project(id.clone()) {

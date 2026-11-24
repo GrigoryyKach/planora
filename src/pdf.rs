@@ -27,6 +27,8 @@ pub enum RowState {
 }
 
 pub struct Row {
+    /// A subtask: listed under its parent, indented.
+    pub sub: bool,
     pub state: RowState,
     pub time: Option<String>,
     pub title: String,
@@ -126,9 +128,11 @@ pub fn render(doc: &Doc) -> Result<Vec<u8>, String> {
         pages[0].push(Item::Text { x: MARGIN, y, size: BODY_SIZE, bold: false, grey: 0.45, text: doc.empty_label.clone() });
     }
     for row in &doc.rows {
+        // Subtasks hang under their parent, indented.
+        let off = if row.sub { 8.0 } else { 0.0 };
         let indent = box_size + 3.0;
         let time_w = row.time.as_ref().map(|t| fonts.width(t, BODY_SIZE, true) + 3.0).unwrap_or(0.0);
-        let first_max = text_w - indent - time_w;
+        let first_max = text_w - off - indent - time_w;
         let lines = fonts.wrap(&row.title, BODY_SIZE, first_max.max(20.0));
         let height = LINE_H * lines.len() as f32;
         if y + height > bottom {
@@ -139,7 +143,7 @@ pub fn render(doc: &Doc) -> Result<Vec<u8>, String> {
         let closed = row.state != RowState::Open;
         let grey = if closed { 0.55 } else { 0.1 };
         // Checkbox: empty, ticked (done) or crossed in red (cancelled).
-        let (bx, by) = (MARGIN, y - box_size + 0.6);
+        let (bx, by) = (MARGIN + off, y - box_size + 0.6);
         let red = (0.82, 0.22, 0.25);
         let outline = if row.state == RowState::Cancelled { red } else { (0.35, 0.35, 0.35) };
         page.push(Item::Line {
@@ -161,13 +165,13 @@ pub fn render(doc: &Doc) -> Result<Vec<u8>, String> {
             }
             RowState::Open => {}
         }
-        let mut x = MARGIN + indent;
+        let mut x = MARGIN + off + indent;
         if let Some(t) = &row.time {
             page.push(Item::Text { x, y, size: BODY_SIZE, bold: true, grey: 0.35, text: t.clone() });
             x += time_w;
         }
         for (i, l) in lines.iter().enumerate() {
-            let lx = if i == 0 { x } else { MARGIN + indent + time_w };
+            let lx = if i == 0 { x } else { MARGIN + off + indent + time_w };
             let ly = y + LINE_H * i as f32;
             page.push(Item::Text { x: lx, y: ly, size: BODY_SIZE, bold: false, grey, text: l.clone() });
             if closed {
@@ -240,13 +244,13 @@ mod tests {
 
     fn doc(n: usize) -> Doc {
         let mut rows = vec![
-            Row { state: RowState::Open, time: Some("09:30".into()), title: "Call the dentist".into() },
-            Row { state: RowState::Done, time: None, title: "Купить молоко и хлеб, позвонить маме".into() },
-            Row { state: RowState::Cancelled, time: None, title: "Скасоване завдання / cancelled task".into() },
-            Row { state: RowState::Open, time: Some("18:00".into()), title: "Підготувати звіт про проєкт".into() },
+            Row { sub: false, state: RowState::Open, time: Some("09:30".into()), title: "Call the dentist".into() },
+            Row { sub: false, state: RowState::Done, time: None, title: "Купить молоко и хлеб, позвонить маме".into() },
+            Row { sub: false, state: RowState::Cancelled, time: None, title: "Скасоване завдання / cancelled task".into() },
+            Row { sub: false, state: RowState::Open, time: Some("18:00".into()), title: "Підготувати звіт про проєкт".into() },
         ];
         for i in 0..n {
-            rows.push(Row { state: if i % 3 == 0 { RowState::Done } else if i % 7 == 0 { RowState::Cancelled } else { RowState::Open }, time: (i % 5 == 0).then(|| "12:15".to_string()), title: format!("Task number {i}: a reasonably long title that may need to wrap onto a second line when the page is narrow, Завдання {i}") });
+            rows.push(Row { sub: false, state: if i % 3 == 0 { RowState::Done } else if i % 7 == 0 { RowState::Cancelled } else { RowState::Open }, time: (i % 5 == 0).then(|| "12:15".to_string()), title: format!("Task number {i}: a reasonably long title that may need to wrap onto a second line when the page is narrow, Завдання {i}") });
         }
         Doc { title: "Проект «Ремонт» / Home".into(), subtitle: "Personal".into(), rows, page_label: "Page {n} of {total}".into(), empty_label: "No tasks".into() }
     }
@@ -267,6 +271,17 @@ mod tests {
         assert!(parsed.pages.len() >= 3, "pages: {}", parsed.pages.len());
         // The bundled fonts are pre-subset to Latin + Cyrillic (tools/subset_fonts.py).
         assert!(bytes.len() < 300_000, "size {}", bytes.len());
+    }
+
+    #[test]
+    fn subtasks_render_indented_under_their_parent() {
+        let mut d = doc(0);
+        d.rows.insert(1, Row { sub: true, state: RowState::Done, time: None, title: "Write the script".into() });
+        d.rows.insert(2, Row { sub: true, state: RowState::Open, time: Some("11:00".into()), title: "Record the voice-over".into() });
+        let bytes = render(&d).unwrap();
+        assert!(bytes.starts_with(b"%PDF"));
+        let parsed = PdfDocument::parse(&bytes, &printpdf::PdfParseOptions::default(), &mut Vec::new()).unwrap();
+        assert_eq!(parsed.pages.len(), 1);
     }
 
     #[test]

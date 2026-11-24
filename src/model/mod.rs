@@ -5,6 +5,8 @@ pub mod calendar;
 pub mod recurrence;
 pub mod reminders;
 pub mod storage;
+pub mod trash;
+pub mod tree;
 pub mod types;
 
 pub use types::*;

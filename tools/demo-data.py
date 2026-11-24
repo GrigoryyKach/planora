@@ -35,11 +35,23 @@ def project(profile, name, color, description=""):
 tasks = []
 
 
-def task(profile, title, project_id=None, **kw):
-    t = {"id": uid(), "profile": profile, "project_id": project_id, "title": title, "description": "", "links": [],
-         "status": None, "priority": None, "deadline": None, "scheduled": None, "time": None, "remind": "default",
+def make(profile, title, project_id=None, **kw):
+    t = {"id": uid(), "profile": profile, "parent_id": None, "project_id": project_id, "title": title, "description": "", "links": [],
+         "status": None, "priority": None, "deadline": None, "deadline_time": None, "scheduled": None, "time": None, "remind": "default",
          "recurrence": None, "done_dates": [], "checklist": [], "created": now, "updated": now, "completed_at": None}
     t.update(kw)
+    return t
+
+
+def task(profile, title, project_id=None, **kw):
+    t = make(profile, title, project_id, **kw)
+    tasks.append(t)
+    return t
+
+
+def sub(parent, title, **kw):
+    """A subtask: shares the parent's profile and project, sits right after the parent."""
+    t = make(parent["profile"], title, parent["project_id"], parent_id=parent["id"], **kw)
     tasks.append(t)
     return t
 
@@ -68,12 +80,19 @@ task("personal", "Water the plants", None, scheduled=day(-1), recurrence={"kind"
 
 task("work", "Design review", web, scheduled=day(0), time="11:00:00", remind={"min": 15}, priority="high",
      description="Walk through the homepage mockups with the team.", checklist=chk(("Prepare slides", True), ("Share the Figma link", False)))
-task("work", "Write landing page copy", web, status="in_progress", priority="urgent", deadline=day(1))
+copy = task("work", "Write landing page copy", web, status="in_progress", priority="urgent", deadline=day(1),
+            description="Hero, features and pricing. Keep it short and concrete.")
+sub(copy, "Draft the headline", status="done", priority="medium", scheduled=day(-1))
+sub(copy, "Write the features section", status="in_progress", priority="high", scheduled=day(0), time="15:00:00", remind={"min": 10})
+sub(copy, "Review with the team", status="todo", deadline=day(1), deadline_time="12:00:00")
+sub(copy, "Add customer quotes", status="todo", priority="low", checklist=chk(("Ask Anna", True), ("Ask the beta group", False)))
 task("work", "Set up analytics", web, status="todo", priority="medium", deadline=day(7), scheduled=day(3))
 task("work", "Cross-browser testing", web, priority="high", deadline=day(12))
 task("work", "Launch announcement", web, deadline=day(18), priority="urgent", scheduled=day(18))
-task("work", "Draft Q4 roadmap", plan, status="in_progress", priority="high", deadline=day(4),
+roadmap = task("work", "Draft Q4 roadmap", plan, status="in_progress", priority="high", deadline=day(4),
      checklist=chk(("Collect team input", True), ("Prioritise", True), ("Estimate", False), ("Send for review", False)))
+sub(roadmap, "Collect team input", status="done")
+sub(roadmap, "Estimate the big items", status="todo", scheduled=day(2))
 task("work", "Budget meeting", plan, scheduled=day(2), time="14:00:00", remind={"min": 10}, priority="medium")
 task("work", "Hiring plan", plan, status="todo", deadline=day(-1), priority="medium")
 task("work", "Team stand-up", None, scheduled=day(-2), time="10:00:00", remind="off",
@@ -88,6 +107,25 @@ for t in tasks:
     if t["status"] == "done":
         t["completed_at"] = now
 
+# The Trash: tasks deleted a few days ago (a plain task, a parent with its subtasks, a lone subtask).
+trash = []
+
+
+def trashed(days_ago, root, subs=(), project_name=None, parent_title=None):
+    when = (dt.datetime.now() - dt.timedelta(days=days_ago, hours=1)).replace(microsecond=0).isoformat()
+    trash.append({"id": root["id"], "deleted_at": when, "tasks": [root, *subs], "index": 0,
+                  "project_name": project_name, "parent_title": parent_title})
+
+
+old_board = make("work", "Redo the old moodboard", web, status="todo", priority="low")
+trashed(1, old_board, project_name="Website launch")
+permit = make("personal", "Renew the parking permit", None, deadline=day(3), priority="medium")
+trashed(2, permit)
+venue = make("work", "Book the team offsite venue", plan, status="todo", priority="medium", deadline=day(20))
+trashed(4, venue, [make("work", "Compare three venues", plan, parent_id=venue["id"], status="done"),
+                   make("work", "Ask about catering", plan, parent_id=venue["id"], status="todo")], project_name="Q4 planning")
+trashed(6, make("personal", "Check reviews", reno, parent_id="gone", status="todo"), project_name="Home renovation", parent_title="Book the electrician")
+
 with open(os.path.join(folder, "data.json"), "w", encoding="utf-8") as f:
-    json.dump({"version": 1, "projects": projects, "tasks": tasks}, f, indent=2)
+    json.dump({"version": 3, "projects": projects, "tasks": tasks, "trash": trash}, f, indent=2)
 print("wrote", os.path.join(folder, "data.json"))

@@ -7,7 +7,7 @@ use std::hash::{BuildHasher, Hasher};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Current on-disk schema version of `data.json`.
-pub const SCHEMA_VERSION: u32 = 2;
+pub const SCHEMA_VERSION: u32 = 3;
 
 pub type Id = String;
 
@@ -160,6 +160,10 @@ pub struct Project {
 pub struct Task {
     pub id: Id,
     pub profile: Profile,
+    /// A subtask belongs to a top-level task (schema 3). It always shares the parent's profile and project.
+    /// Nesting is one level deep: the parent of a subtask is never a subtask itself.
+    #[serde(default)]
+    pub parent_id: Option<Id>,
     #[serde(default)]
     pub project_id: Option<Id>,
     pub title: String,
@@ -202,6 +206,7 @@ impl Task {
         Task {
             id: new_id(),
             profile,
+            parent_id: None,
             project_id: None,
             title: title.trim().to_string(),
             description: String::new(),
@@ -242,19 +247,52 @@ impl Task {
     }
 }
 
+/// A deleted task (with its subtasks, when it was a parent) waiting in the Trash. Trashed tasks live outside
+/// `Data::tasks`, so no list, calendar, search, count, export or reminder can ever see them.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
+pub struct TrashEntry {
+    /// The id of the task that was deleted (the first of `tasks`).
+    pub id: Id,
+    pub deleted_at: NaiveDateTime,
+    /// The deleted task first, then its subtasks in their order.
+    pub tasks: Vec<Task>,
+    /// Where the task sat in `Data::tasks`, so a restore puts it back in the same place.
+    #[serde(default)]
+    pub index: usize,
+    /// Name of its project when it was deleted (shown in the Trash even if the project is gone later).
+    #[serde(default)]
+    pub project_name: Option<String>,
+    /// Title of the parent when the deleted task was a subtask.
+    #[serde(default)]
+    pub parent_title: Option<String>,
+}
+
+impl TrashEntry {
+    pub fn root(&self) -> &Task {
+        &self.tasks[0]
+    }
+    pub fn subtask_count(&self) -> usize {
+        self.tasks.len().saturating_sub(1)
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
 pub struct Data {
     pub version: u32,
     #[serde(default)]
     pub projects: Vec<Project>,
-    /// The vector order is the "manual" sort order.
+    /// The vector order is the "manual" sort order. Subtasks sit in the same vector; their order among
+    /// the subtasks of one parent is their order in it.
     #[serde(default)]
     pub tasks: Vec<Task>,
+    /// Deleted tasks (schema 3).
+    #[serde(default)]
+    pub trash: Vec<TrashEntry>,
 }
 
 impl Default for Data {
     fn default() -> Self {
-        Data { version: SCHEMA_VERSION, projects: Vec::new(), tasks: Vec::new() }
+        Data { version: SCHEMA_VERSION, projects: Vec::new(), tasks: Vec::new(), trash: Vec::new() }
     }
 }
 

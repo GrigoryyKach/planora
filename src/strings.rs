@@ -15,6 +15,17 @@ macro_rules! strings {
         const RU: S = S { $( $name: $ru, )* $( $pname: $pru, )* };
         const UK: S = S { $( $name: $uk, )* $( $pname: $puk, )* };
         pub static TABLE: Table<S> = Table { en: &EN, ru: &RU, uk: &UK };
+
+        impl S {
+            /// Every string as `(key, [en, ru, uk])`; plural strings contribute their three forms. For the tests.
+            #[cfg(test)]
+            pub fn catalog() -> Vec<(&'static str, [&'static str; 3])> {
+                let mut v: Vec<(&'static str, [&'static str; 3])> = Vec::new();
+                $( v.push((stringify!($name), [$en, $ru, $uk])); )*
+                $( for i in 0..3 { v.push((stringify!($pname), [$pen[i], $pru[i], $puk[i]])); } )*
+                v
+            }
+        }
     };
 }
 
@@ -58,7 +69,7 @@ strings! {
         nothing_on_day: "Nothing on this day yet", "На этот день пока ничего нет", "На цей день поки нічого немає";
         add_on_day: "Add task on this day", "Добавить задачу на этот день", "Додати завдання на цей день";
         added_to: "Task added to {where}", "Задача добавлена: {where}", "Завдання додано: {where}";
-        task_deleted: "Task deleted", "Задача удалена", "Завдання видалено";
+        task_trashed: "Task moved to Trash", "Задача перемещена в Корзину", "Завдання переміщено до Кошика";
         copy_suffix: "(copy)", "(копия)", "(копія)";
         save_failed: "Could not save your data. Check the disk and try again.", "Не удалось сохранить данные. Проверьте диск и повторите.", "Не вдалося зберегти дані. Перевірте диск і повторіть.";
 
@@ -113,7 +124,7 @@ strings! {
         delete_project: "Delete project", "Удалить проект", "Видалити проєкт";
         delete_project_q: "Delete project “{name}”?", "Удалить проект «{name}»?", "Видалити проєкт «{name}»?";
         move_to_inbox: "Move its tasks to the Inbox", "Перенести задачи во «Входящие»", "Перенести завдання до «Вхідних»";
-        delete_tasks_too: "Delete its tasks too", "Удалить и его задачи", "Видалити й його завдання";
+        delete_tasks_too: "Move its tasks to the Trash", "Переместить и его задачи в Корзину", "Перемістити й його завдання до Кошика";
         project_name_hint: "Project name", "Название проекта", "Назва проєкту";
         project_desc_hint: "Description (optional)", "Описание (необязательно)", "Опис (необовʼязково)";
         color: "Colour", "Цвет", "Колір";
@@ -216,6 +227,51 @@ strings! {
         corrupt_title: "Your data file could not be read", "Не удалось прочитать файл данных", "Не вдалося прочитати файл даних";
         corrupt_text: "The file was renamed to {file} and Planora started empty. Daily backups are in the data folder under backups: open Settings and restore one.", "Файл переименован в {file}, Planora запущена с пустыми данными. Ежедневные копии лежат в папке данных, в подпапке backups: откройте «Настройки» и восстановите одну из них.", "Файл перейменовано на {file}, Planora запущена з порожніми даними. Щоденні копії лежать у теці даних, у підтеці backups: відкрийте «Налаштування» й відновіть одну з них.";
 
+        // Delete confirmation and the Trash
+        delete_task_q: "Delete task?", "Удалить задачу?", "Видалити завдання?";
+        delete_subtask_q: "Delete subtask?", "Удалить подзадачу?", "Видалити підзавдання?";
+        trash_note: "It will be moved to the Trash and can be restored for {n} days.", "Она попадёт в Корзину, и её можно будет восстановить в течение {n} дней.", "Воно потрапить до Кошика, і його можна буде відновити протягом {n} днів.";
+        trash_note_many: "They will be moved to the Trash and can be restored for {n} days.", "Они попадут в Корзину, и их можно будет восстановить в течение {n} дней.", "Вони потраплять до Кошика, і їх можна буде відновити протягом {n} днів.";
+        trash: "Trash", "Корзина", "Кошик";
+        trash_hint: "Deleted tasks stay here for {n} days, then they are removed for good.", "Удалённые задачи лежат здесь {n} дней, потом удаляются навсегда.", "Видалені завдання лежать тут {n} днів, потім вилучаються назавжди.";
+        trash_empty: "The Trash is empty", "Корзина пуста", "Кошик порожній";
+        trash_empty_hint: "Deleted tasks will appear here", "Здесь появятся удалённые задачи", "Тут зʼявляться видалені завдання";
+        empty_trash: "Empty trash", "Очистить корзину", "Очистити кошик";
+        empty_trash_q: "Empty the Trash?", "Очистить корзину?", "Очистити кошик?";
+        delete_forever: "Delete permanently", "Удалить навсегда", "Видалити назавжди";
+        delete_forever_q: "Delete permanently?", "Удалить навсегда?", "Видалити назавжди?";
+        cannot_undo: "This cannot be undone.", "Это нельзя отменить.", "Це неможливо скасувати.";
+        deleted_when: "Deleted {when}", "Удалено {when}", "Видалено {when}";
+        deletes_soon: "Deletes at the next cleanup", "Удалится при следующей очистке", "Видалиться під час наступного очищення";
+        trash_subtask_of: "Subtask of {parent}", "Подзадача «{parent}»", "Підзавдання «{parent}»";
+        restored: "Task restored", "Задача восстановлена", "Завдання відновлено";
+        restored_inbox: "The project no longer exists: restored to the Inbox", "Проекта больше нет: задача восстановлена во «Входящие»", "Проєкту вже немає: завдання відновлено до «Вхідних»";
+        restored_detached: "The parent task is gone: restored as a regular task", "Родительской задачи нет: восстановлена как обычная задача", "Батьківського завдання немає: відновлено як звичайне завдання";
+        keep_deleted: "Keep deleted tasks for", "Хранить удалённые задачи", "Зберігати видалені завдання";
+        days_n: "{n} days", "{n} дней", "{n} днів";
+        keep_deleted_hint: "Old items are removed when Planora starts and once a day. If you shorten the period, items older than the new limit go at the next cleanup.", "Старые элементы удаляются при запуске Planora и раз в сутки. Если сократить срок, элементы старше нового срока исчезнут при ближайшей очистке.", "Старі елементи видаляються під час запуску Planora й раз на добу. Якщо скоротити строк, елементи старші за новий строк зникнуть під час найближчого очищення.";
+
+        // Subtasks
+        subtasks: "Subtasks", "Подзадачи", "Підзавдання";
+        add_subtask: "Add subtask", "Добавить подзадачу", "Додати підзавдання";
+        add_subtask_hint: "Add a subtask and press Enter", "Новая подзадача, затем Enter", "Нове підзавдання, потім Enter";
+        subtask_of: "Subtask of", "Подзадача для", "Підзавдання для";
+        convert_to_task: "Convert to task", "Сделать обычной задачей", "Зробити звичайним завданням";
+        make_subtask: "Make subtask of…", "Сделать подзадачей…", "Зробити підзавданням…";
+        pick_parent_hint: "Search for the parent task", "Найдите родительскую задачу", "Знайдіть батьківське завдання";
+        no_parent_candidates: "No tasks to choose from", "Нет подходящих задач", "Немає завдань для вибору";
+        no_subtask_recurring: "A repeating task cannot become a subtask", "Повторяющаяся задача не может стать подзадачей", "Завдання, що повторюється, не може стати підзавданням";
+        no_subtask_has_subtasks: "A task with subtasks cannot become a subtask", "Задача с подзадачами не может стать подзадачей", "Завдання з підзавданнями не може стати підзавданням";
+        subtasks_all_done: "All subtasks done, mark the task done?", "Все подзадачи выполнены, отметить задачу выполненной?", "Усі підзавдання виконано, позначити завдання виконаним?";
+        mark_done: "Mark done", "Отметить", "Позначити";
+        complete_parent_q: "Complete the subtasks too?", "Завершить и подзадачи?", "Завершити й підзавдання?";
+        complete_all: "Complete all", "Завершить все", "Завершити все";
+        only_the_task: "Only the task", "Только задачу", "Лише завдання";
+        sub_location_hint: "Project and profile come from the parent task", "Проект и профиль берутся из родительской задачи", "Проєкт і профіль беруться з батьківського завдання";
+        show_subtasks: "Show subtasks", "Показать подзадачи", "Показати підзавдання";
+        hide_subtasks: "Hide subtasks", "Скрыть подзадачи", "Сховати підзавдання";
+        drag_to_reorder: "Drag to reorder", "Перетащите, чтобы изменить порядок", "Перетягніть, щоб змінити порядок";
+
         // Tray and notifications
         tray_open: "Open Planora", "Открыть Planora", "Відкрити Planora";
         tray_new: "New task", "Новая задача", "Нове завдання";
@@ -226,6 +282,68 @@ strings! {
     }
     plural {
         tasks_plural: ["{n} task", "{n} tasks", "{n} tasks"], ["{n} задача", "{n} задачи", "{n} задач"], ["{n} завдання", "{n} завдання", "{n} завдань"];
+        items_plural: ["{n} item", "{n} items", "{n} items"], ["{n} элемент", "{n} элемента", "{n} элементов"], ["{n} елемент", "{n} елементи", "{n} елементів"];
+        subtasks_plural: ["and {n} subtask", "and {n} subtasks", "and {n} subtasks"], ["и {n} подзадача", "и {n} подзадачи", "и {n} подзадач"], ["і {n} підзавдання", "і {n} підзавдання", "і {n} підзавдань"];
+        open_subtasks_plural: ["{n} subtask is still open", "{n} subtasks are still open", "{n} subtasks are still open"], ["{n} подзадача ещё не выполнена", "{n} подзадачи ещё не выполнены", "{n} подзадач ещё не выполнены"], ["{n} підзавдання ще не виконано", "{n} підзавдання ще не виконано", "{n} підзавдань ще не виконано"];
+        deletes_in_plural: ["Deletes in {n} day", "Deletes in {n} days", "Deletes in {n} days"], ["Удалится через {n} день", "Удалится через {n} дня", "Удалится через {n} дней"], ["Видалиться через {n} день", "Видалиться через {n} дні", "Видалиться через {n} днів"];
         projects_plural: ["{n} project", "{n} projects", "{n} projects"], ["{n} проект", "{n} проекта", "{n} проектов"], ["{n} проєкт", "{n} проєкти", "{n} проєктів"];
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::S;
+
+    /// The `{name}` placeholders of a string, sorted.
+    fn placeholders(s: &str) -> Vec<String> {
+        let mut out = Vec::new();
+        let mut rest = s;
+        while let Some(a) = rest.find('{') {
+            let Some(b) = rest[a..].find('}') else { break };
+            out.push(rest[a..a + b + 1].to_string());
+            rest = &rest[a + b + 1..];
+        }
+        out.sort();
+        out
+    }
+
+    #[test]
+    fn every_string_is_filled_in_all_three_languages() {
+        for (key, [en, ru, uk]) in S::catalog() {
+            for (lang, text) in [("en", en), ("ru", ru), ("uk", uk)] {
+                assert!(!text.trim().is_empty(), "{key} is empty in {lang}");
+                assert!(!text.contains("TODO"), "{key} has a TODO in {lang}");
+            }
+        }
+    }
+
+    #[test]
+    fn placeholders_match_in_every_language() {
+        for (key, [en, ru, uk]) in S::catalog() {
+            assert_eq!(placeholders(en), placeholders(ru), "{key}: en and ru placeholders differ");
+            assert_eq!(placeholders(en), placeholders(uk), "{key}: en and uk placeholders differ");
+        }
+    }
+
+    #[test]
+    fn russian_and_ukrainian_are_not_left_in_english() {
+        let cyr = |s: &str| s.chars().any(|c| ('\u{400}'..='\u{4ff}').contains(&c));
+        for (key, [en, ru, uk]) in S::catalog() {
+            if en.chars().any(|c| c.is_alphabetic()) {
+                assert!(cyr(ru), "{key} (ru) looks untranslated: {ru}");
+                assert!(cyr(uk), "{key} (uk) looks untranslated: {uk}");
+            }
+        }
+    }
+
+    #[test]
+    fn new_trash_and_subtask_strings_exist() {
+        let keys: Vec<&str> = S::catalog().into_iter().map(|(k, _)| k).collect();
+        for k in [
+            "delete_task_q", "trash_note", "trash", "empty_trash", "delete_forever", "restored_inbox", "keep_deleted", "keep_deleted_hint",
+            "subtasks", "add_subtask", "make_subtask", "convert_to_task", "subtasks_all_done", "complete_parent_q", "subtasks_plural", "deletes_in_plural",
+        ] {
+            assert!(keys.contains(&k), "missing string {k}");
+        }
     }
 }

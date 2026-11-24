@@ -185,11 +185,7 @@ impl Worker {
     pub fn update(&self, tasks: &[Task], default_before: u32, enabled: bool, lang: Lang, h24: bool) {
         let (lock, cv) = &*self.shared;
         if let Ok(mut s) = lock.lock() {
-            s.tasks = tasks
-                .iter()
-                .filter(|t| (t.time.is_some() && t.scheduled.is_some()) || (t.deadline_time.is_some() && t.deadline.is_some()))
-                .cloned()
-                .collect();
+            s.tasks = crate::model::reminders::timed_for_reminders(tasks);
             s.default_before = default_before;
             s.enabled = enabled;
             s.lang = lang;

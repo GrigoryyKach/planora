@@ -24,6 +24,8 @@ pub enum Nav {
     Calendar,
     Inbox(Profile),
     Project(Id),
+    /// Deleted tasks, kept for a few days.
+    Trash,
     Settings,
 }
 
@@ -68,6 +70,10 @@ pub struct Config {
     pub filter: ProfileFilter,
     pub hide_done: bool,
     pub sort: SortMode,
+    /// How many days deleted tasks stay in the Trash: 7, 14 or 30.
+    pub trash_days: u32,
+    /// Parent tasks whose subtasks are shown in the lists (collapsed by default).
+    pub expanded: Vec<Id>,
     pub window: Option<Window>,
     #[serde(skip)]
     pub fresh: bool,
@@ -91,6 +97,8 @@ impl Default for Config {
             filter: ProfileFilter::All,
             hide_done: false,
             sort: SortMode::Manual,
+            trash_days: crate::model::trash::DEFAULT_RETENTION,
+            expanded: Vec::new(),
             window: None,
             fresh: false,
         }
@@ -110,6 +118,7 @@ impl Config {
         let mut cfg: Config = text.as_deref().and_then(|s| serde_json::from_str(s.trim_start_matches('\u{feff}')).ok()).unwrap_or_default();
         cfg.fresh = text.is_none();
         cfg.default_remind = cfg.default_remind.min(24 * 60);
+        cfg.trash_days = crate::model::trash::clamp_retention(cfg.trash_days);
         cfg
     }
 
@@ -185,6 +194,31 @@ mod tests {
         assert_eq!(l.nav, Nav::Project("abc".into()));
         assert_eq!(l.filter, ProfileFilter::Work);
         assert!(l.week_starts_sunday);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn trash_retention_and_expanded_parents_persist() {
+        let dir = tmp("trash");
+        // Defaults for an existing config written before 1.5.0.
+        std::fs::write(dir.join("config.json"), "{\"theme\":\"dark\"}").unwrap();
+        let old = Config::load_from(&dir);
+        assert_eq!(old.trash_days, 7);
+        assert!(old.expanded.is_empty());
+        for days in [7, 14, 30] {
+            let mut c = Config::default();
+            c.trash_days = days;
+            c.expanded = vec!["a".into(), "b".into()];
+            c.nav = Nav::Trash;
+            assert!(c.save_to(&dir));
+            let l = Config::load_from(&dir);
+            assert_eq!(l.trash_days, days);
+            assert_eq!(l.expanded, vec!["a".to_string(), "b".to_string()]);
+            assert_eq!(l.nav, Nav::Trash);
+        }
+        // A value that is not one of the choices falls back to the default.
+        std::fs::write(dir.join("config.json"), "{\"trash_days\":3}").unwrap();
+        assert_eq!(Config::load_from(&dir).trash_days, 7);
         let _ = std::fs::remove_dir_all(dir);
     }
 
